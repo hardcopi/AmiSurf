@@ -11,10 +11,11 @@
 enum { RID_CLOSE=0x40ff, RID_URL=0x4100, RID_URLCHG, RID_FIND, RID_FINDPREV, RID_FINDNEXT, RID_FINDCLOSE, RID_NEWTAB,
        RID_SET_SAVE, RID_SET_USE, RID_SET_CANCEL,
        RID_TAB0=0x4200, RID_TABX0=0x4300, RID_TB0=0x4400, RID_MENU0=0x4500,
-       RID_BMK0=0x4600, RID_BMF0=0x4700, RID_BMB0=0x4780, RID_BMMORE=0x47F0 };   /* 0.87: bookmark i, folder f, bar button k, bar \xBB */
+       RID_BMK0=0x4600, RID_BMF0=0x4700, RID_BMB0=0x4780, RID_BMMORE=0x47F0, RID_BMCTX0=0x4800 };   /* 0.88: bar button k's right-click menu (k=NBMB: \xBB / the bar) */   /* 0.87: bookmark i, folder f, bar button k, bar \xBB */
 #define NTB 9
 static Object *m_findbar, *m_findcnt, *m_status, *m_info, *m_top, *m_statbar, *m_lock;
 static Object *m_tab[MAXTAB], *m_tabx[MAXTAB], *m_tabg[MAXTAB], *m_tb[NTB];
+static Object *m_s_start, *m_s_starturl, *m_s_newtab, *m_s_newtaburl;   /* 0.88 */
 static Object *m_setwin, *m_s_host, *m_s_port, *m_s_token, *m_s_home, *m_s_theme, *m_s_font, *m_s_uif, *m_s_tool, *m_s_mode, *m_s_br;
 static struct MUI_CustomClass *m_pagecl, *m_iconcl;
 static unsigned long long g_esc_us;
@@ -130,6 +131,8 @@ static STRPTR cy_font[]={(STRPTR)"Workbench font",(STRPTR)"Topaz 8",NULL};
 static STRPTR cy_tool[]={(STRPTR)"Normal",(STRPTR)"Large",NULL};
 static STRPTR cy_mode[]={(STRPTR)"Workbench window",(STRPTR)"Full screen (RTG, else AGA)",(STRPTR)"Full screen, ask mode",NULL};
 static STRPTR cy_br[]={(STRPTR)"Host default",(STRPTR)"Chrome",(STRPTR)"Firefox",NULL};
+static STRPTR cy_start[]={(STRPTR)"Home page",(STRPTR)"Blank page",(STRPTR)"This page:",NULL};
+static STRPTR cy_newtab[]={(STRPTR)"Blank page",(STRPTR)"Home page",(STRPTR)"This page:",NULL};
 static Object *sbtn(const char *t,const char *help){
   return TextObject, ButtonFrame, MUIA_Background,MUII_ButtonBack, MUIA_Font,MUIV_Font_Button, MUIA_InputMode,MUIV_InputMode_RelVerify,
     MUIA_Text_PreParse,(ULONG)"\33c", MUIA_Text_Contents,(ULONG)t, MUIA_Text_SetMax,TRUE, MUIA_ShortHelp,(ULONG)help, End; }
@@ -149,6 +152,9 @@ static void settings_open(void){
           Child,(ULONG)lab("Token"), Child,(ULONG)(m_s_token=StringObject, StringFrame, MUIA_String_MaxLen,ASBC_MAX_TOKEN+1, MUIA_String_Secret,TRUE, MUIA_CycleChain,1, MUIA_ShortHelp,(ULONG)"Empty: the paired Host token (HostToken in AmiStudio Prefs/ or AmiSurf Data/)", End),
           Child,(ULONG)lab("Home page"), Child,(ULONG)(m_s_home=StringObject, StringFrame, MUIA_String_MaxLen,500, MUIA_CycleChain,1, MUIA_ShortHelp,(ULONG)"Empty: the home page set in the host's settings (menu: Host settings)", End),
           Child,(ULONG)lab("Browser"), Child,(ULONG)(m_s_br=cyc(cy_br)), End),
+        Child,(ULONG)(ColGroup(3), GroupFrameT("Start and new tabs"),
+          Child,(ULONG)lab("On startup"), Child,(ULONG)(m_s_start=cyc(cy_start)), Child,(ULONG)(m_s_starturl=StringObject, StringFrame, MUIA_String_MaxLen,590, MUIA_CycleChain,1, MUIA_ShortHelp,(ULONG)"The page AmiSurf opens when it starts (with \"This page:\")", End),
+          Child,(ULONG)lab("New tab"), Child,(ULONG)(m_s_newtab=cyc(cy_newtab)), Child,(ULONG)(m_s_newtaburl=StringObject, StringFrame, MUIA_String_MaxLen,590, MUIA_CycleChain,1, MUIA_ShortHelp,(ULONG)"The page a new tab opens (with \"This page:\")", End), End),
         Child,(ULONG)(ColGroup(2), GroupFrameT("Look (restart to apply)"),
           Child,(ULONG)lab("Theme"), Child,(ULONG)(m_s_theme=cyc(cy_theme)),
           Child,(ULONG)lab("Screen font"), Child,(ULONG)(m_s_font=cyc(cy_font)),
@@ -171,12 +177,16 @@ static void settings_open(void){
   set(m_s_uif,MUIA_String_Contents,(ULONG)uif);
   set(m_s_theme,MUIA_Cycle_Active,g_theme_pro); set(m_s_font,MUIA_Cycle_Active,g_font_topaz); set(m_s_tool,MUIA_Cycle_Active,g_large);
   set(m_s_mode,MUIA_Cycle_Active,g_wbmode?0:g_modereq?2:1); set(m_s_br,MUIA_Cycle_Active,g_browser);
+  set(m_s_start,MUIA_Cycle_Active,g_startpage); set(m_s_starturl,MUIA_String_Contents,(ULONG)g_starturl);
+  set(m_s_newtab,MUIA_Cycle_Active,g_newtabpage); set(m_s_newtaburl,MUIA_String_Contents,(ULONG)g_newtaburl);
   set(m_setwin,MUIA_Window_Open,TRUE);
   CRUMB("settings window is open (%d)",(int)xget(m_setwin,MUIA_Window_Open)); STKLOG("settings"); }
 static void settings_done(int act){
   if(!m_setwin) return;
   CRUMB("settings window %s",act==2?"Save":act==1?"Use":"Cancel");
   if(act){ const char *port=(const char*)xget(m_s_port,MUIA_String_Contents);
+    pages_apply((int)xget(m_s_start,MUIA_Cycle_Active),(const char*)xget(m_s_starturl,MUIA_String_Contents),
+      (int)xget(m_s_newtab,MUIA_Cycle_Active),(const char*)xget(m_s_newtaburl,MUIA_String_Contents));
     settings_apply((const char*)xget(m_s_host,MUIA_String_Contents),port?atoi(port):0,(const char*)xget(m_s_token,MUIA_String_Contents),
       (const char*)xget(m_s_home,MUIA_String_Contents),(const char*)xget(m_s_uif,MUIA_String_Contents),
       (int)xget(m_s_theme,MUIA_Cycle_Active),(int)xget(m_s_font,MUIA_Cycle_Active),(int)xget(m_s_tool,MUIA_Cycle_Active),(int)xget(m_s_mode,MUIA_Cycle_Active),(int)xget(m_s_br,MUIA_Cycle_Active),act==2); }
@@ -283,7 +293,7 @@ static ULONG page_event(Object *obj,struct MUIP_HandleEvent *msg){
       MUI 5 (muimaster V21) owns WFLG_RMBTRAP and draws its menus itself (Paint 1.0.60); older MUI uses Intuition menus,
       so there the trap is set only while the pointer is over the page. */
     if(w && MUIMasterBase->lib_Version<21 && in!=g_rmbtrap){ g_rmbtrap=in; Forbid(); if(in) w->Flags|=WFLG_RMBTRAP; else w->Flags&=~WFLG_RMBTRAP; Permit(); }
-    if(in||g_pagedown) ev_move(mx,my,im->Qualifier);
+    if(in||g_pagedown) ev_move(mx,my,im->Qualifier); else ptr_inside(0);
     return 0; }
   if(im->Class==IDCMP_MOUSEBUTTONS){
     int up=!!(im->Code&IECODE_UP_PREFIX);
@@ -356,41 +366,86 @@ static ULONG SAVEDS ASM page_dispatch(REG(a0,struct IClass *cl),REG(a2,Object *o
 #define NBMB 24
 static Object *m_bmbar, *m_bmb[NBMB], *m_bmmore, *m_bmnote, *m_mbmbar;
 static char g_bmlab[NBMB][64];
-static Object *bmbtn(const char *t,const char *help){
+/* 0.88: bar buttons are a Text subclass that draws the site's 16x16 icon over leading spaces of the label
+   (g_favsp; MUIA_InnerLeft on these buttons kept MUI 5 from laying the bar out at all) */
+static struct MUI_CustomClass *m_bmbcl; static int g_bm_over;   /* (defined below) */
+#define MUI_FAVW 20
+static int bm_btn_index(Object *o);
+static ULONG SAVEDS ASM bmbtn_dispatch(REG(a0,struct IClass *cl),REG(a2,Object *obj),REG(a1,Msg msg)){
+  if(msg->MethodID==MUIM_Draw){ ULONG r=DoSuperMethodA(cl,obj,msg);
+    if(((struct MUIP_Draw*)msg)->flags&(MADF_DRAWOBJECT|MADF_DRAWUPDATE)){
+      int k=bm_btn_index(obj); const unsigned char *px=g_bm_known?fav_slot(k):(fav_defaults(),g_fv_def);
+      { static int once; if(!once){ once=1; asb_log("bookmarks bar: site icons %s",can_rgb()?"on":"off (no RGB output on this screen)"); } }
+      if(px){ struct RastPort *srp=RP; int sx=OX, sy=OY; RP=_rp(obj); OX=0; OY=0;
+        fav_draw(px,_mleft(obj)+1,_mtop(obj)+(_mheight(obj)-16)/2,-1); RP=srp; OX=sx; OY=sy; } }
+    return r; }
+  return DoSuperMethodA(cl,obj,msg); }
+static Object *bmbtn(const char *t,const char *help,int icon){
+  if(icon && m_bmbcl)   /* (can_rgb() is only known once the window is open) */
+    return (Object*)NewObject(m_bmbcl->mcc_Class,NULL, ButtonFrame, MUIA_Background,MUII_ButtonBack, MUIA_Font,MUIV_Font_Button, MUIA_InputMode,MUIV_InputMode_RelVerify,
+      MUIA_Text_Contents,(ULONG)t, MUIA_Text_SetMax,FALSE, MUIA_HorizWeight,0, MUIA_ShortHelp,(ULONG)help, MUIA_ShowMe,FALSE, TAG_DONE);
   return TextObject, ButtonFrame, MUIA_Background,MUII_ButtonBack, MUIA_Font,MUIV_Font_Button, MUIA_InputMode,MUIV_InputMode_RelVerify,
     MUIA_Text_Contents,(ULONG)t, MUIA_Text_SetMax,FALSE, MUIA_HorizWeight,0, MUIA_ShortHelp,(ULONG)help, MUIA_ShowMe,FALSE, End; }
 static void bmbar_build(void){
   m_bmbar=HGroup, MUIA_Group_Spacing,2, MUIA_ShowMe,g_bmbar, End;
-  for(int i=0;i<NBMB;i++){ m_bmb[i]=bmbtn("","Click: open. Shift-click: open in a new tab"); DoMethod(m_bmbar,OM_ADDMEMBER,(ULONG)m_bmb[i]); }
+  for(int i=0;i<NBMB;i++){ m_bmb[i]=bmbtn("","Click: open. Shift-click: open in a new tab. Right-click: more",1); DoMethod(m_bmbar,OM_ADDMEMBER,(ULONG)m_bmb[i]); }
   m_bmnote=TextObject, MUIA_Text_Contents,(ULONG)"", MUIA_Text_SetMin,FALSE, MUIA_HorizWeight,100, End;
   DoMethod(m_bmbar,OM_ADDMEMBER,(ULONG)m_bmnote);
-  m_bmmore=bmbtn("\xBB","More bookmarks"); DoMethod(m_bmbar,OM_ADDMEMBER,(ULONG)m_bmmore); }
+  m_bmmore=bmbtn("\xBB","More bookmarks",0); DoMethod(m_bmbar,OM_ADDMEMBER,(ULONG)m_bmmore); }
+static Object *mi(const char *t,const char *key,int id); static Object *mbar(void);
+/* 0.88: right-click menus on the bar (MUIA_ContextMenu; the pick arrives via MUIA_ContextMenuTrigger) */
+static Object *m_bmctx[NBMB][2], *m_bmctxbar[2]; static ULONG g_bmctx_item; static int g_bmctx_kind[NBMB];
+static Object *bm_ctx_strip(int kind){
+  const char *lab[12]; int act[12]; int n=bm_ctx_rows(kind,lab,act,0);
+  Object *menu=MenuObject, MUIA_Menu_Title,(ULONG)(kind==0?"Bookmark":kind==1?"Folder":"Bookmarks bar"), End; if(!menu) return NULL;
+  for(int i=0;i<n;i++){ Object *it=lab[i][0]=='-'?mbar():mi(lab[i],NULL,act[i]); if(it) DoMethod(menu,OM_ADDMEMBER,(ULONG)it); }
+  Object *st=MenustripObject, MUIA_Family_Child,(ULONG)menu, End; if(!st) MUI_DisposeObject(menu); return st; }
+static void bm_ctx_build(void){
+  for(int k=0;k<NBMB;k++){ m_bmctx[k][0]=bm_ctx_strip(0); m_bmctx[k][1]=bm_ctx_strip(1); g_bmctx_kind[k]=0; if(m_bmctx[k][0]) set(m_bmb[k],MUIA_ContextMenu,(ULONG)m_bmctx[k][0]); }
+  m_bmctxbar[0]=bm_ctx_strip(2); m_bmctxbar[1]=bm_ctx_strip(2);
+  if(m_bmctxbar[0]) set(m_bmmore,MUIA_ContextMenu,(ULONG)m_bmctxbar[0]); if(m_bmctxbar[1]) set(m_bmnote,MUIA_ContextMenu,(ULONG)m_bmctxbar[1]); }
+static void bm_ctx_notify(void){
+  for(int k=0;k<=NBMB;k++){ Object *o=k<NBMB?m_bmb[k]:m_bmmore;
+    DoMethod(o,MUIM_Notify,MUIA_ContextMenuTrigger,MUIV_EveryTime,(ULONG)o,3,MUIM_WriteLong,MUIV_TriggerValue,(ULONG)&g_bmctx_item);
+    DoMethod(o,MUIM_Notify,MUIA_ContextMenuTrigger,MUIV_EveryTime,(ULONG)m_app,2,MUIM_Application_ReturnID,RID_BMCTX0+k); }
+  DoMethod(m_bmnote,MUIM_Notify,MUIA_ContextMenuTrigger,MUIV_EveryTime,(ULONG)m_bmnote,3,MUIM_WriteLong,MUIV_TriggerValue,(ULONG)&g_bmctx_item);
+  DoMethod(m_bmnote,MUIM_Notify,MUIA_ContextMenuTrigger,MUIV_EveryTime,(ULONG)m_app,2,MUIM_Application_ReturnID,RID_BMCTX0+NBMB); }
+static void bm_ctx_free(void){   /* before the window goes: detach, then dispose ourselves */
+  for(int k=0;k<NBMB;k++){ if(m_bmb[k]) set(m_bmb[k],MUIA_ContextMenu,0); for(int j=0;j<2;j++) if(m_bmctx[k][j]){ MUI_DisposeObject(m_bmctx[k][j]); m_bmctx[k][j]=NULL; } }
+  if(m_bmmore) set(m_bmmore,MUIA_ContextMenu,0); if(m_bmnote) set(m_bmnote,MUIA_ContextMenu,0);
+  for(int j=0;j<2;j++) if(m_bmctxbar[j]){ MUI_DisposeObject(m_bmctxbar[j]); m_bmctxbar[j]=NULL; } }
+static int bm_btn_index(Object *o){ for(int k=0;k<NBMB;k++) if(m_bmb[k]==o) return k; return -1; }
 static int g_bm_over=16, g_bm_measured;   /* button width minus its text width (frame + spacing), measured once shown */
 static struct TextFont *g_bm_font;
+static char g_favsp[16]; static int g_favsp_w;   /* spaces in front of each label, wide enough for the icon */
 static int mui_bm_measure(const char *l){
   struct RastPort rp; InitRastPort(&rp); if(g_bm_font) SetFont(&rp,g_bm_font);
-  return TextLength(&rp,(STRPTR)l,(ULONG)strlen(l))+g_bm_over; }
+  return TextLength(&rp,(STRPTR)l,(ULONG)strlen(l))+g_bm_over+(strcmp(l,"\xBB")?g_favsp_w:0); }
 static void mui_bm_relayout(void){
   if(!m_bmbar || !m_win || !xget(m_win,MUIA_Window_Open)) return;
   if(!g_bmbar){ set(m_bmbar,MUIA_ShowMe,FALSE); return; }
   g_bm_font=_font(m_bmmore);
+  if(m_bmbcl && can_rgb() && !g_favsp[0]){ struct RastPort rp; InitRastPort(&rp); if(g_bm_font) SetFont(&rp,g_bm_font);
+    int sw=TextLength(&rp,(STRPTR)" ",1); if(sw<1) sw=4; int n=(MUI_FAVW+sw-1)/sw; if(n>15) n=15; memset(g_favsp,' ',(size_t)n); g_favsp[n]=0; g_favsp_w=n*sw; }
   if(xget(m_bmb[0],MUIA_ShowMe) && _width(m_bmb[0])>0 && g_bmlab[0][0]){ struct RastPort rp; InitRastPort(&rp); if(g_bm_font) SetFont(&rp,g_bm_font);
-    int o=_width(m_bmb[0])-TextLength(&rp,(STRPTR)g_bmlab[0],(ULONG)strlen(g_bmlab[0])); if(o>4 && o<60) g_bm_over=o+1; g_bm_measured=1; }
+    int o=_width(m_bmb[0])-TextLength(&rp,(STRPTR)g_bmlab[0],(ULONG)strlen(g_bmlab[0]));   /* (the label includes g_favsp) */ if(o>4 && o<60) g_bm_over=o+1; g_bm_measured=1; }
   int avail=_mwidth(m_top)-4;
   if(g_bm_known) bm_layout(avail,mui_bm_measure,2); else { g_nslot=g_nshown=0; g_morex=-1; }
   if(g_nshown>NBMB) g_nshown=NBMB;
   DoMethod(m_bmbar,MUIM_Group_InitChange);
   for(int k=0;k<NBMB;k++){
     int show=k<g_nshown || (!g_bm_known && k==0);
-    if(show){ if(g_bm_known) slot_label(g_slot[k],g_bmlab[k],sizeof g_bmlab[k]); else scopy_u(g_bmlab[k],sizeof g_bmlab[k],"Bookmarks");
-      set(m_bmb[k],MUIA_Text_Contents,(ULONG)g_bmlab[k]); }
+    if(show){ char lb[64]; if(g_bm_known) slot_label(g_slot[k],lb,sizeof lb); else scopy_u(lb,sizeof lb,"Bookmarks");
+      snprintf(g_bmlab[k],sizeof g_bmlab[k],"%s%s",g_favsp,lb);
+      set(m_bmb[k],MUIA_Text_Contents,(ULONG)g_bmlab[k]);
+      int kind=bm_slot_kind(k)==1; if(kind!=g_bmctx_kind[k] && m_bmctx[k][kind]){ g_bmctx_kind[k]=kind; set(m_bmb[k],MUIA_ContextMenu,(ULONG)m_bmctx[k][kind]); } }
     if((int)xget(m_bmb[k],MUIA_ShowMe)!=show) set(m_bmb[k],MUIA_ShowMe,show); }
   set(m_bmnote,MUIA_Text_Contents,(ULONG)(!g_bm_known?"\33r(the bookmarks bar needs the 0.87 engine)":!g_nslot?"No bookmarks yet: Amiga D or the star bookmarks this page":""));
   { int m=g_morex>=0; if((int)xget(m_bmmore,MUIA_ShowMe)!=m) set(m_bmmore,MUIA_ShowMe,m); }
   if(!xget(m_bmbar,MUIA_ShowMe)) set(m_bmbar,MUIA_ShowMe,TRUE);
   DoMethod(m_bmbar,MUIM_Group_ExitChange);
   asb_log("bookmarks bar: %d of %d shown%s",g_nshown,g_nslot,g_morex>=0?" + more":"");
-  if(!g_bm_measured && g_nshown) g_bm_dirty=1; }   /* once more with the real button frame width */
+  { static int tries; if(!g_bm_measured && g_nshown && ++tries<=3) g_bm_dirty=1; } }   /* once more with the real button frame width (0.88: not forever) */
 static void bmbar_apply(void){
   if(m_mbmbar) nnset(m_mbmbar,MUIA_Menuitem_Checked,g_bmbar);
   if(m_bmbar) set(m_bmbar,MUIA_ShowMe,g_bmbar);
@@ -568,7 +623,7 @@ static void handle_rid(ULONG id){
   else if(id==RID_FINDPREV) send_cmd("findprev");
   else if(id==RID_FINDNEXT) send_cmd("findnext");
   else if(id==RID_FINDCLOSE) find_show(0);
-  else if(id==RID_NEWTAB){ if(g_fd>=0) asbc_send(g_fd,ASBC_TABNEW,NULL,0); }
+  else if(id==RID_NEWTAB) new_tab();
   else if(id==RID_SET_SAVE) settings_done(2);
   else if(id==RID_SET_USE) settings_done(1);
   else if(id==RID_SET_CANCEL) settings_done(0);
@@ -588,13 +643,15 @@ static void handle_rid(ULONG id){
     if(!g_bm_known){ open_page("bookmarks"); return; }
     if(k<g_nshown){ int sl=g_slot[k]; if(sl>=0) bm_open(sl,qual_shift()); else { g_bmpop_req=1; g_bmpop_f=-1-sl; g_bmpop_anchor=m_bmb[k]; } } }
   else if(id==RID_BMMORE){ g_bmpop_req=2; g_bmpop_anchor=m_bmmore; }
+  else if(id>=RID_BMCTX0 && id<=RID_BMCTX0+NBMB){ int k=(int)(id-RID_BMCTX0); Object *it=(Object*)g_bmctx_item; g_bmctx_item=0;
+    if(it) bm_ctx_do(k<NBMB?k:-1,(int)xget(it,MUIA_UserData)); }
   else if(id>=RID_MENU0 && id<RID_MENU0+M_NUM+2){ int m=(int)(id-RID_MENU0);
     if(m==M_NUM+1) DoMethod(m_app,MUIM_Application_OpenConfigWindow,0);
     else if(m==M_FIND){ find_show(1); MUI_Redraw(m_tb[7],MADF_DRAWOBJECT); }
     else do_menu(m,NULL); } }
 
 #include "asb_rexx.inc"
-int main(int argc, char **argv){
+static int asb_main(int argc, char **argv){
   stack_mark(); store_migrate(); prefs_load(); win_box_load();
   tooltypes_load(argc,argv);
   for(int i=1;i<argc;i++){
@@ -604,7 +661,7 @@ int main(int argc, char **argv){
     else if(strchr(argv[i],'=') && strncasecmp(argv[i],"http",4)){ char k[40]; const char *eq=strchr(argv[i],'='); int kl=(int)(eq-argv[i]); if(kl>39) kl=39; memcpy(k,argv[i],(size_t)kl); k[kl]=0; theme_tooltype(k,eq+1); }
     else if(!strcasecmp(argv[i],"MODEREQ")) theme_tooltype("MODEREQ",NULL);
     else if(!strcasecmp(argv[i],"STATS")) theme_tooltype("STATS",NULL);
-    else if(argv[i][0]!='-'){ snprintf(g_url,sizeof g_url,"%s",argv[i]); g_url_given=1; }
+    else if(argv[i][0]!='-'){ snprintf(g_url,sizeof g_url,"%s",argv[i]); g_url_given=1; g_url_set=1; }
   }
   if(rexx_start()) return 0;   /* 0.85: another AmiSurf runs and took the URL */
   g_tabh=g_toolh=0; g_stath=0;
@@ -626,6 +683,7 @@ int main(int argc, char **argv){
   theme_pens();
   m_pagecl=MUI_CreateCustomClass(NULL,(STRPTR)MUIC_Area,NULL,sizeof(struct pagedata),(APTR)page_dispatch);
   m_iconcl=MUI_CreateCustomClass(NULL,(STRPTR)MUIC_Area,NULL,sizeof(struct icondata),(APTR)icon_dispatch);
+  m_bmbcl=MUI_CreateCustomClass(NULL,(STRPTR)MUIC_Text,NULL,4,(APTR)bmbtn_dispatch);   /* 0.88 (NULL: plain text buttons) */
   if(!m_pagecl||!m_iconcl){ printf("MUI classes failed\n"); return 20; }
   TR("classes ok");
   icons_load();
@@ -653,7 +711,7 @@ int main(int argc, char **argv){
   if(!g_ownscr) win_box(scr,&wx,&wy,&ww,&wh);
   mui_env_note();   /* 0.86: which ENV:MUI/AMISURF* files are the user's (see asb_store.inc) */
   m_app=ApplicationObject, MUIA_Application_Title,(ULONG)"AmiSurf",
-    MUIA_Application_Version,(ULONG)"$VER: AmiSurf " ASB_VERSION " (19.10.2026)",
+    MUIA_Application_Version,(ULONG)"$VER: AmiSurf " ASB_VERSION " (20.10.2026)",
     MUIA_Application_Copyright,(ULONG)"AmiStudio", MUIA_Application_Author,(ULONG)"AmiStudio",
     MUIA_Application_Base,(ULONG)"AMISURF", MUIA_Application_SingleTask,FALSE,
     MUIA_Application_Description,(ULONG)"Web browser (pages rendered by Chrome on the host)",
@@ -702,6 +760,7 @@ int main(int argc, char **argv){
   nnset(m_mbmbar,MUIA_Menuitem_Checked,g_bmbar);
   for(int i=0;i<NBMB;i++) DoMethod(m_bmb[i],MUIM_Notify,MUIA_Pressed,FALSE,(ULONG)m_app,2,MUIM_Application_ReturnID,RID_BMB0+i);
   DoMethod(m_bmmore,MUIM_Notify,MUIA_Pressed,FALSE,(ULONG)m_app,2,MUIM_Application_ReturnID,RID_BMMORE);
+  bm_ctx_build(); bm_ctx_notify();
   nnset(m_url,MUIA_String_Contents,(ULONG)g_url);
   snprintf(g_status,sizeof g_status,"AmiSurf %s",ASB_VERSION);
   TR("notifies ok");
@@ -760,11 +819,11 @@ int main(int argc, char **argv){
     }
   }
   rc_abort(); if(g_fd>=0) CloseSocket(g_fd);
-  pop_win_close(); STKLOG("quit"); asb_log("quit"); audio_close(); rexx_end(); qual_close();
+  pop_win_close(); ptr_free(); STKLOG("quit"); asb_log("quit"); audio_close(); rexx_end(); qual_close();
   win_box_save((struct Window*)xget(m_win,MUIA_Window_Window));
   set(m_win,MUIA_Window_Open,FALSE);
-  hamb_free(); MUI_DisposeObject(m_app); mui_env_tidy(); bm_free(); MUI_DeleteCustomClass(m_pagecl); MUI_DeleteCustomClass(m_iconcl);
-  theme_pens_free(); icons_free(); free(g_chunky); free(g_scaled); free(g_rgb); free(g_nat); free(g_jbuf);
+  hamb_free(); bm_ctx_free(); MUI_DisposeObject(m_app); mui_env_tidy(); bm_free(); MUI_DeleteCustomClass(m_pagecl); MUI_DeleteCustomClass(m_iconcl); if(m_bmbcl) MUI_DeleteCustomClass(m_bmbcl);
+  theme_pens_free(); icons_free(); fav_free(); free(g_chunky); free(g_scaled); free(g_rgb); free(g_nat); free(g_jbuf);
   if(g_font) CloseFont(g_font);
   if(g_ownscr) CloseScreen(scr); else UnlockPubScreen(NULL,scr);
   if(AslBase) CloseLibrary(AslBase);

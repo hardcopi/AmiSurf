@@ -13,7 +13,7 @@ CF040 = -O2 -m68040 -m68881 $(AMIGABASE)
 CF020 = -O2 -m68020 -m68881 -ffloat-store -fexcess-precision=standard -DASP_020 $(AMIGABASE)
 CFCPU = -O2 -m68020 -msoft-float $(AMIGABASE)
 MUIFLAGS = -Iui/muiinc -DASP_MUI -Wno-pointer-sign -Wno-attributes -Wno-unused-variable
-AMIGA_SRC = ui/asb_gfx_chrome.c ui/asb_theme.inc ui/asb_ash.inc ui/asb_store.inc sys/rtg_amiga.h $(PROTO) ui/asb_audio.inc ui/asb_log.inc ui/asb_rexx.inc
+AMIGA_SRC = ui/asb_gfx_chrome.c ui/asb_theme.inc ui/asb_ash.inc ui/asb_store.inc sys/rtg_amiga.h $(PROTO) ui/asb_audio.inc ui/asb_log.inc ui/asb_rexx.inc ui/asb_bmarks.inc ui/asb_bmbar_gt.inc
 PROTO     = chrome/asbc.c chrome/asbc.h chrome/qoi.h
 
 all: host amiga
@@ -23,7 +23,7 @@ amiga: $(AMIGA_BINS)
 chrome-host: build/host/asb-chromed
 sdl: build/host/asb-sdl
 
-build/host/asb-chromed: chrome/host.c chrome/features.inc chrome/frames.inc chrome/bidi.inc chrome/audio.inc $(PROTO)
+build/host/asb-chromed: chrome/host.c chrome/features.inc chrome/frames.inc chrome/bidi.inc chrome/audio.inc chrome/favicon.inc $(PROTO)
 	@mkdir -p $(@D); $(HOSTCC) $(HOSTCFLAGS) -o $@ chrome/host.c chrome/asbc.c -lcrypto -lm
 build/host/asb-sdl: ui/asb_sdl_chrome.c $(PROTO)
 	@mkdir -p $(@D); $(HOSTCC) $(HOSTCFLAGS) -I/usr/include/SDL2 -o $@ ui/asb_sdl_chrome.c chrome/asbc.c -lSDL2 -lSDL2_ttf -lm
@@ -37,6 +37,14 @@ build/amiga/AmiSurf-020: ui/asb_mui_chrome.c ui/asb_mui.inc $(AMIGA_SRC) build/a
 	@mkdir -p $(@D); $(AMIGACC) $(CF020) $(MUIFLAGS) -o $@ ui/asb_mui_chrome.c chrome/asbc.c build/amiga/cpucheck-020.o -lm -lamiga
 build/amiga/AmiSurf-gadtools: $(AMIGA_SRC) build/amiga/cpucheck-020.o
 	@mkdir -p $(@D); $(AMIGACC) $(CF020) -o $@ ui/asb_gfx_chrome.c chrome/asbc.c build/amiga/cpucheck-020.o -lm -lamiga
+
+# 0.88: test tool: runs a program on a stack the task's tc_SPLower/tc_SPUpper do not describe (a beta tester's 0.87 Gurus)
+build/amiga/badstack: test/badstack.c
+	@mkdir -p $(@D); $(AMIGACC) -O2 -m68020 $(AMIGABASE) -Wno-format -o $@ $<
+
+# 0.88: test tool: a right mouse click on request (FS-UAE runs; see the file)
+build/amiga/rmbclick: test/rmbclick.c
+	@mkdir -p $(@D); $(AMIGACC) -O2 -m68020 $(AMIGABASE) -Wno-format -o $@ $<
 
 # protocol + QOI round-trip test
 build/host/asbc_test: test/asbc_test.c $(PROTO)
@@ -66,7 +74,7 @@ clean:
 .PHONY: all host amiga chrome-host sdl test lha clean
 
 # static asb-chromed (AmiKit bundle; also a portable engine for the AmiStudio Host's "browser" service)
-build/static/asb-chromed: chrome/host.c chrome/features.inc chrome/frames.inc chrome/bidi.inc chrome/audio.inc $(PROTO)
+build/static/asb-chromed: chrome/host.c chrome/features.inc chrome/frames.inc chrome/bidi.inc chrome/audio.inc chrome/favicon.inc $(PROTO)
 	@mkdir -p $(@D); $(HOSTCC) -O2 -std=gnu99 -pthread -static -o $@ chrome/host.c chrome/asbc.c -lcrypto -lz -lzstd -lm 2>&1 | grep -v "warning: Using" || true; test -x $@
 # 0.82: the own Linux host package (asb-chromed-<ver>-linux-x86_64.tar.gz, dist/host/) is retired; the AmiStudio Host
 # runs asb-chromed (docs/HOST.md). The last one is asb-chromed-0.77-linux-x86_64.tar.gz.

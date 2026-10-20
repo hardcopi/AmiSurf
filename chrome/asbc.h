@@ -51,6 +51,7 @@ enum {
   ASBC_AUDIO  = 44, /* u8 fmt (ASBC_AU_*), u8 channels, u16 rate, u32 host ms timestamp, u16 nframes, data */
   ASBC_BMARKS = 45, /* 0.87, host -> client: utf-8 lines "url\ttitle\tfolder" (bookmarks.tsv order); sent after the
                        client's "bookmarks" cmd and again whenever the list changes. Older clients never ask. */
+  ASBC_FAVICON= 46, /* 0.88, host -> client: u8 nhost, host, u8 w, u8 h, w*h*4 RGBA (0x0: none); reply to "favicon HOST" */
   ASBC_SCROLL = 43  /* u16 x,y,w,h, i16 dy: move that page area by dy (content moves up when dy<0) */
 };
 

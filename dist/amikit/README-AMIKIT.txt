@@ -11,8 +11,8 @@ when AmiSurf connects. It lives inside the AmiSurf drawer:
     Host/                         (this folder)
       run-host.sh                 starts the AmiStudio Host on 127.0.0.1:9220 (detaches, safe to run twice)
       amistudio-hostd             the AmiStudio Host 0.1.7 (amistudio-hostd from its release, unchanged)
-      asb-chromed                 the engine: AmiSurf 0.87's own asb-chromed (static); Host 0.1.7's
-                                  engine is 0.85's and has no bookmarks bar list (0.87)
+      asb-chromed                 the engine: AmiSurf 0.88's own asb-chromed (static); Host 0.1.7's
+                                  engine is 0.85's (no bookmarks bar list, site icons, hand pointer)
       chromium/                   a portable, headless ungoogled-chromium (the one Chromium in the archive)
       engine.sh                   starts that engine with this edition's data (Host/data)
       data/                       everything the Host, the engine and Chromium keep (made on first start)
@@ -30,7 +30,8 @@ Install
   run-host.sh puts back the exec bits LHA does not keep.
   Upgrading from 0.82 or older: unpack over the old drawer; Host/data (history, bookmarks,
   passwords, Chromium profile) is kept and used by the new engine.
-  Upgrading from 0.83/0.84/0.86: unpack over the old drawer as well. 0.87 uses its own engine copy
+  Upgrading from 0.87: unpack over the old drawer; Host/asb-chromed is replaced.
+  Upgrading from 0.83/0.84/0.86: unpack over the old drawer as well. 0.87+ uses its own engine copy
   again (Host/LAYOUT says "own": Host/amistudio-hostd, Host/asb-chromed, Host/chromium/), so the
   old Host/amistudio-host/ folder (~700 MB) is no longer used and can be deleted once no Host from
   it runs (it stops by itself after the idle time).

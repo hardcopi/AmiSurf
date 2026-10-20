@@ -1,9 +1,10 @@
 # AmiSurf
 
-> **Public snapshot.** This repository is a clean public snapshot of AmiSurf's development tree, published under the
-> GNU General Public License v3 (see `LICENSE`). Beta-tester logs, private notes and old build archives were left
-> out, and the earlier commit history (including the `classic` branch and `classic-final` tag mentioned below) is not
-> included here. Release downloads are on the AmiStudio site and in AmiStudio itself.
+> **Public snapshot (AmiSurf 0.88).** This repository is a clean public snapshot of AmiSurf's development tree, currently
+> at version 0.88, published under the GNU General Public License v3 (see `LICENSE`). Beta-tester logs, private notes
+> and old build archives were left out, and the earlier commit history (including the `classic` branch and
+> `classic-final` tag mentioned below) is not included here. Release downloads are on the AmiStudio site and in
+> AmiStudio itself.
 
 AmiSurf (formerly AmiStudio Browser; app of the **AmiStudio** suite, see `docs/RENAME-AMISURF.md`) is a web browser for classic 68k AmigaOS 3.x, built on a **Chrome or Firefox backend**: Google Chrome (default) or
 Mozilla Firefox runs on a Linux host and renders the pages; the Amiga (or Linux SDL) program is a thin client that shows the page and sends input back.

@@ -32,7 +32,7 @@
 #define STBI_MAX_DIMENSIONS 8192
 #include "../third_party/stb/stb_image.h"
 
-#define ASB_VERSION "0.87"
+#define ASB_VERSION "0.88"
 static int g_tabh=36, g_toolh=44, g_stath=24, g_full, g_zoom=100, g_findcur, g_findtot, g_uisize=16;
 #define TABH g_tabh
 #define TOOLH g_toolh

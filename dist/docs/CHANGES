@@ -1,4 +1,36 @@
 AmiSurf (formerly AmiStudio Browser) - changes
+0.88 (20.10.2026)
+  * Fixed Gurus on closing About, at the menu button (GadTools build) and
+    while resizing the window, seen when AmiSurf was started by a launcher
+    whose task stack fields did not describe the real stack: the 0.87 stack
+    switch (libnix __stkinit) then left AmiSurf running outside its stack.
+    AmiSurf now sets up its own 256 KB stack with exec's StackSwap, whatever
+    started it, and logs how it was started.
+  * Settings > Start and new tabs: On startup (Home page, Blank page, This
+    page) and New tab (Blank page, Home page, This page). AmiSurf no longer
+    opens example.com at start; a URL given on the command line or as
+    URL=/START= still wins. Kept in Data/AmiSurf.prefs (STARTPAGE, STARTURL,
+    NEWTAB, NEWTABURL). An address without http(s):// gets https://.
+  * Hand pointer over links and buttons (needs the 0.88 engine).
+  * Steady text cursor in page fields (e.g. the Bookmarks search field),
+    which a blinking cursor could leave invisible (0.88 engine).
+  * Bookmarks bar: right mouse button on the bar for Open, Open in new tab,
+    Edit..., Hide from bookmarks bar (folders: Hide folder from bookmarks
+    bar), Hide bookmarks bar and Manage bookmarks. Manage bookmarks > Edit
+    has a "Show on the bookmarks bar" box; hidden bookmarks stay in the
+    Bookmarks menu. bookmarks.tsv keeps its format (an optional fifth
+    column, written only for hidden bookmarks). Edit and Hide need the 0.88
+    engine.
+  * Site icons (16x16) on the bookmarks bar, with a default icon for sites
+    without one and a folder icon. The engine fetches and scales them on the
+    PC; each site's icon (about 1 KB) crosses the link once and is kept in
+    Data/Favicons/ in the drawer. Needs the 0.88 engine (and curl on the PC).
+  * Settings > Save keeps the lines of Data/AmiSurf.prefs it does not set
+    itself (HOSTMODE=, SERVICE=, AUTOHOST=, SOUND= ...); 0.87 dropped them.
+  * Settings > Use says "Settings in use until you quit - Save keeps them"
+    instead of "Settings saved" (Use is for this run only, as before).
+  * AmiKit edition: the AmiStudio Host 0.1.7 (unchanged) with AmiSurf 0.88's
+    own engine (LAYOUT "own", as in 0.87).
 0.87 (19.10.2026)
   * Fixed the Guru 8000 0004 right after Settings... from the menu button
     (beta report, AmiKit, MUI 5): AmiSurf ran on the small default stack

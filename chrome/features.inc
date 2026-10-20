@@ -90,22 +90,27 @@ static void settings_load(void){
   fclose(f); g_zoom=g_defzoom; }
 
 /* ---- bookmarks / history: TSV "time\turl\ttitle" (0.87: bookmarks may have a 4th column, the folder; an older
-   engine reads it as part of the title and keeps it when it rewrites the file) ---- */
+   engine reads it as part of the title and keeps it when it rewrites the file. 0.88: an optional 5th column,
+   "nobar" = not on the bookmarks bar (still in the Bookmarks menu); written only for such bookmarks, so a file
+   without hidden bookmarks is byte for byte what 0.87 wrote) ---- */
 #define LMAX 2000
-typedef struct { long t; char url[1200]; char title[200]; char folder[64]; } ent_t;
+typedef struct { long t; char url[1200]; char title[200]; char folder[64]; int nobar; } ent_t;
 static int list_read(const char *name, ent_t *e, int cap){
   char p[700]; cfgpath(p,sizeof p,name); FILE *f=fopen(p,"r"); if(!f) return 0;
   char l[1600]; int n=0;
   while(fgets(l,sizeof l,f)){
     l[strcspn(l,"\r\n")]=0; char *a=strchr(l,'\t'); if(!a) continue; *a++=0; char *b=strchr(a,'\t'); if(b) *b++=0;
     char *c=b?strchr(b,'\t'):NULL; if(c) *c++=0;
+    char *d=c?strchr(c,'\t'):NULL; if(d) *d++=0;
     if(n>=cap){ memmove(e,e+1,sizeof(ent_t)*(size_t)(cap-1)); n=cap-1; }
-    e[n].t=atol(l); scopy(e[n].url,sizeof e[n].url,a); scopy(e[n].title,sizeof e[n].title,b?b:""); scopy(e[n].folder,sizeof e[n].folder,c?c:""); n++; }
+    e[n].t=atol(l); scopy(e[n].url,sizeof e[n].url,a); scopy(e[n].title,sizeof e[n].title,b?b:""); scopy(e[n].folder,sizeof e[n].folder,c?c:"");
+    e[n].nobar=d&&strstr(d,"nobar")!=NULL; n++; }
   fclose(f); return n; }
 static void list_write(const char *name, ent_t *e, int n){
   char p[700], t[720]; cfgpath(p,sizeof p,name); snprintf(t,sizeof t,"%s.tmp",p);
   FILE *f=fopen(t,"w"); if(!f) return;
-  for(int i=0;i<n;i++){ if(e[i].folder[0]) fprintf(f,"%ld\t%s\t%s\t%s\n",e[i].t,e[i].url,e[i].title,e[i].folder); else fprintf(f,"%ld\t%s\t%s\n",e[i].t,e[i].url,e[i].title); }
+  for(int i=0;i<n;i++){ if(e[i].nobar) fprintf(f,"%ld\t%s\t%s\t%s\tnobar\n",e[i].t,e[i].url,e[i].title,e[i].folder);
+    else if(e[i].folder[0]) fprintf(f,"%ld\t%s\t%s\t%s\n",e[i].t,e[i].url,e[i].title,e[i].folder); else fprintf(f,"%ld\t%s\t%s\n",e[i].t,e[i].url,e[i].title); }
   fclose(f); rename(t,p); }
 static void clean_field(char *s){ for(;*s;s++) if(*s=='\t'||*s=='\n'||*s=='\r') *s=' '; }
 static void list_append(const char *name,const char *url,const char *title){
@@ -118,19 +123,35 @@ static void hist_note(void){ /* called from send_meta */
   scopy(last,sizeof last,g_url); list_append("history.tsv",g_url,g_title);
   /* keep history bounded */
   static int adds; if(++adds%200==0){ static ent_t e[LMAX]; int n=list_read("history.tsv",e,LMAX); list_write("history.tsv",e,n); } }
-/* 0.87: the bookmark list for the client's bookmarks bar and menu (ASBC_BMARKS), once it asked ("bookmarks") */
+/* 0.87: the bookmark list for the client's bookmarks bar and menu (ASBC_BMARKS), once it asked ("bookmarks").
+   0.88: a client that asks "bookmarks 2" gets a first line "#2" and a 4th field, flags ("h": not on the bar), and
+   may send bmhide/bmshow/bmedit URL and favicon HOST; a 0.87 client still asks "bookmarks" and gets 3 fields. */
 static int g_bm_want;
 static void send_bmarks(void){
   if(g_cli<0 || !g_bm_want) return;
   static ent_t e[LMAX]; int n=list_read("bookmarks.tsv",e,LMAX);
   size_t cap=64*1024, o=0; char *b=malloc(cap); if(!b) return;
-  for(int i=0;i<n && i<500;i++){ int m=snprintf(b+o,cap-o,"%s\t%s\t%s\n",e[i].url,e[i].title,e[i].folder); if(m<0||(size_t)m>=cap-o) break; o+=(size_t)m; }
+  if(g_bm_want>=2) o+=(size_t)snprintf(b,cap,"#2\n");
+  for(int i=0;i<n && i<500;i++){ int m=g_bm_want>=2?snprintf(b+o,cap-o,"%s\t%s\t%s\t%s\n",e[i].url,e[i].title,e[i].folder,e[i].nobar?"h":"")
+                                               :snprintf(b+o,cap-o,"%s\t%s\t%s\n",e[i].url,e[i].title,e[i].folder);
+    if(m<0||(size_t)m>=cap-o) break; o+=(size_t)m; }
   asbc_send(g_cli,ASBC_BMARKS,b,(uint32_t)o); free(b); }
 static void bookmark_current(void){
   if(skip_url(g_url)){ send_status("Cannot bookmark this page"); return; }
   static ent_t e[LMAX]; int n=list_read("bookmarks.tsv",e,LMAX);
   for(int i=0;i<n;i++) if(!strcmp(e[i].url,g_url)){ send_status("Already bookmarked"); return; }
   list_append("bookmarks.tsv",g_url,g_title); send_status("Bookmarked"); send_bmarks(); }
+/* 0.88: the bar's right-click menu: hide/show one bookmark on the bar, open its Edit form */
+static void bm_setbar(const char *url,int nobar){
+  static ent_t e[LMAX]; int n=list_read("bookmarks.tsv",e,LMAX), hit=0;
+  for(int i=0;i<n;i++) if(!strcmp(e[i].url,url)){ e[i].nobar=nobar; hit=1; }
+  if(!hit){ send_status("Not a bookmark"); return; }
+  list_write("bookmarks.tsv",e,n); send_bmarks();
+  send_status(nobar?"Hidden from the bookmarks bar (still in the Bookmarks menu; Edit on the Bookmarks page shows it again)":"Shown on the bookmarks bar"); }
+static void bm_editpage(const char *url){
+  static ent_t e[LMAX]; int n=list_read("bookmarks.tsv",e,LMAX); char u[200];
+  for(int i=0;i<n;i++) if(!strcmp(e[i].url,url)){ snprintf(u,sizeof u,"http://127.0.0.1:%d/bookmarks?edit=%d",g_pageport,i); cdp_nav(u); return; }
+  snprintf(u,sizeof u,"http://127.0.0.1:%d/bookmarks",g_pageport); cdp_nav(u); }
 static int ci_has(const char *h,const char *n){ if(!n[0]) return 1; return strcasestr(h,n)!=NULL; }
 static void suggest(const char *pre){
   if(g_cli<0) return;
@@ -337,23 +358,24 @@ static void page_css(buf_t *o){
   bput(o,"<!doctype html><html><head><meta charset=utf-8><style>body{font:16px sans-serif;background:#282828;color:#eee;margin:0}"
          "header{background:#535353;padding:12px 20px;font-size:22px}header a{color:#ccc;font-size:15px;margin-left:18px}"
          "main{padding:16px 20px}a{color:#7cb7ff}table{border-collapse:collapse;width:100%%}td{padding:6px 8px;border-bottom:1px solid #3a3a3a;vertical-align:top}"
-         "input,select{font:16px sans-serif;background:#454545;color:#eee;border:1px solid #666;padding:5px}button{font:16px sans-serif;padding:5px 14px;background:#378EF0;color:#fff;border:0}"
+         "input,select{caret-animation:manual;font:16px sans-serif;background:#454545;color:#eee;border:1px solid #666;padding:5px}button{font:16px sans-serif;padding:5px 14px;background:#378EF0;color:#fff;border:0}"
          ".dim{color:#999;font-size:13px}.bar{height:8px;background:#454545;width:240px}.bar i{display:block;height:8px;background:#378EF0}</style>");
 }
 static void page_head(buf_t *o,const char *title){
   page_css(o);
   bput(o,"<title>%s</title></head><body><header>%s<a href=/bookmarks>Bookmarks</a><a href=/history>History</a><a href=/downloads>Downloads</a><a href=/passwords>Passwords</a><a href=/settings>Settings</a></header><main>",title,title); }
+static int g_list_nofocus;   /* 0.88: the Edit form is above the list: leave the focus to it */
 static void page_list(buf_t *o,const char *file,const char *q,const char *self,int editable){
   static ent_t e[LMAX]; int n=list_read(file,e,LMAX);
   char eq[400]; hesc(q,eq,sizeof eq);
-  bput(o,"<form action=/%s><input name=q value=\"%s\" placeholder=Search size=40 autofocus> <button>Search</button></form><p></p><table>",self,eq);
+  bput(o,"<form action=/%s><input name=q value=\"%s\" placeholder=Search size=40%s> <button>Search</button></form><p></p><table>",self,eq,g_list_nofocus?"":" autofocus");
   int shown=0;
   for(int k=0;k<n && shown<400;k++){ int i=editable?k:n-1-k;
     if(!ci_has(e[i].url,q) && !ci_has(e[i].title,q)) continue; shown++;
     char hu[2600], ht[500], tm[40]; hesc(e[i].url,hu,sizeof hu); hesc(e[i].title[0]?e[i].title:e[i].url,ht,sizeof ht);
     time_t tt=(time_t)e[i].t; strftime(tm,sizeof tm,"%Y-%m-%d %H:%M",localtime(&tt));
     char hf[200]=""; if(e[i].folder[0]){ char t[150]; hesc(e[i].folder,t,sizeof t); snprintf(hf,sizeof hf,"[%s] ",t); }
-    bput(o,"<tr><td><a href=\"%s\">%s%s</a><div class=dim>%s</div></td><td class=dim>%s</td><td>",hu,hf,ht,hu,tm);
+    bput(o,"<tr><td><a href=\"%s\">%s%s</a>%s<div class=dim>%s</div></td><td class=dim>%s</td><td>",hu,hf,ht,editable&&e[i].nobar?" <span class=dim>(not on the bar)</span>":"",hu,tm);
     if(editable) bput(o,"<a href=\"/%s?edit=%d\">Edit</a> &nbsp; ",self,i);
     bput(o,"<a href=\"/%s?del=%d&k=%s&q=%s\">Delete</a></td></tr>",self,i,g_pagekey,eq);
   }
@@ -378,16 +400,20 @@ static void page_serve(int c){
       if(d>=0&&d<cnt){ memmove(e+d,e+d+1,sizeof(ent_t)*(size_t)(cnt-d-1)); list_write(file,e,cnt-1); if(bm) send_bmarks(); } }
     if(authed && !bm && qparam(q,"clear",v,sizeof v)) list_write(file,NULL,0);
     if(authed && bm && qparam(q,"save",v,sizeof v)){ static ent_t e[LMAX]; int cnt=list_read(file,e,LMAX), d=atoi(v);
-      char fo[200]=""; qparam(q,"url",v,sizeof v); qparam(q,"title",v2,sizeof v2); qparam(q,"folder",fo,sizeof fo); clean_field(v); clean_field(v2); clean_field(fo);
-      if(d>=0&&d<cnt&&v[0]){ scopy(e[d].url,sizeof e[d].url,v); scopy(e[d].title,sizeof e[d].title,v2); scopy(e[d].folder,sizeof e[d].folder,fo); list_write(file,e,cnt); send_bmarks(); } }
+      char fo[200]="", bf[8], bar[8]; qparam(q,"url",v,sizeof v); qparam(q,"title",v2,sizeof v2); qparam(q,"folder",fo,sizeof fo); clean_field(v); clean_field(v2); clean_field(fo);
+      if(d>=0&&d<cnt&&v[0]){ scopy(e[d].url,sizeof e[d].url,v); scopy(e[d].title,sizeof e[d].title,v2); scopy(e[d].folder,sizeof e[d].folder,fo);
+        if(qparam(q,"bf",bf,sizeof bf)) e[d].nobar=!qparam(q,"bar",bar,sizeof bar);   /* 0.88 form: the checkbox (an unchecked box is not sent) */
+        list_write(file,e,cnt); send_bmarks(); } }
     page_head(&o,bm?"Bookmarks":"History");
     if(bm && qparam(q,"edit",v,sizeof v)){ static ent_t e[LMAX]; int cnt=list_read(file,e,LMAX), d=atoi(v);
       if(d>=0&&d<cnt){ char hu[2600], ht[500], hf[200]; hesc(e[d].url,hu,sizeof hu); hesc(e[d].title,ht,sizeof ht); hesc(e[d].folder,hf,sizeof hf);
         bput(&o,"<form action=/bookmarks><input type=hidden name=k value=%s><input type=hidden name=save value=%d>"
-                "<p>Title<br><input name=title size=60 value=\"%s\"></p><p>Address<br><input name=url size=80 value=\"%s\"></p>"
+                "<p>Title<br><input name=title size=60 autofocus value=\"%s\"></p><p>Address<br><input name=url size=80 value=\"%s\"></p>"
                 "<p>Folder <span class=dim>(empty: on the bookmarks bar itself; a name: in that folder)</span><br><input name=folder size=30 value=\"%s\"></p>"
-                "<button>Save</button> <a href=/bookmarks>Cancel</a></form><hr>",g_pagekey,d,ht,hu,hf); } }
-    qparam(q,"q",v,sizeof v); page_list(&o,file,v,bm?"bookmarks":"history",bm);
+                "<p><input type=hidden name=bf value=1><label><input type=checkbox name=bar value=1%s> Show on the bookmarks bar</label> <span class=dim>(off: only in the Bookmarks menu)</span></p>"
+                "<button>Save</button> <a href=/bookmarks>Cancel</a></form><hr>",g_pagekey,d,ht,hu,hf,e[d].nobar?"":" checked"); } }
+    g_list_nofocus=bm && qparam(q,"edit",v2,sizeof v2);
+    qparam(q,"q",v,sizeof v); page_list(&o,file,v,bm?"bookmarks":"history",bm); g_list_nofocus=0;
   } else if(!strcmp(path,"/downloads")){
     int running=0; for(int i=0;i<g_ndl;i++) if(g_dl[i].state==0) running=1;
     page_css(&o); if(running) bput(&o,"<meta http-equiv=refresh content=2>");
@@ -488,6 +514,7 @@ static void ban_fail(uint32_t ip){
   if(++g_ban[slot].fails>=5){ g_ban[slot].until=now+300; struct in_addr a; a.s_addr=ip; fprintf(stderr,"asb-chromed: %s blocked for 5 minutes after %d failed handshakes\n",inet_ntoa(a),g_ban[slot].fails); } }
 
 /* ---- client commands ---- */
+static void fav_request(const char *host);   /* favicon.inc */
 static void do_cmd(char *c){
   char *arg=strchr(c,' '); if(arg) *arg++=0; else arg="";
   int i;
@@ -525,7 +552,10 @@ static void do_cmd(char *c){
     load_tabs(); { int k=tab_by_id(cur); if(k>=0) g_tab=k; } send_tabs(); }
   else if(!strcmp(c,"tabnext")||!strcmp(c,"tabprev")){ load_tabs(); if(g_ntab<2) return; int t=(g_tab+(c[3]=='n'?1:g_ntab-1))%g_ntab; attach_tab(t); }
   else if(!strcmp(c,"bookmark")) bookmark_current();
-  else if(!strcmp(c,"bookmarks")){ g_bm_want=1; send_bmarks(); }
+  else if(!strcmp(c,"bookmarks")){ g_bm_want=atoi(arg)>=2?2:1; send_bmarks(); }
+  else if(!strcmp(c,"bmhide")||!strcmp(c,"bmshow")) bm_setbar(arg,c[2]=='h');
+  else if(!strcmp(c,"bmedit")) bm_editpage(arg);
+  else if(!strcmp(c,"favicon")) fav_request(arg);
   else if(!strcmp(c,"suggest")) suggest(arg);
   else if(!strcmp(c,"home")) cdp_nav(g_homepage);
   else if(!strcmp(c,"avdelay")){ int d=atoi(arg); if(d<0) d=0; if(d>1500) d=1500; if(d!=g_avdelay_ms) fprintf(stderr,"asb-chromed: picture held back %d ms for A/V sync\n",d); g_avdelay_ms=d; }

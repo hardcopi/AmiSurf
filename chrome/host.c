@@ -5,6 +5,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
+#define STBI_ONLY_GIF
+#define STBI_ONLY_BMP
 #define STBI_NO_STDIO
 #define STBI_NO_THREAD_LOCALS
 #include "../third_party/stb/stb_image.h"
@@ -267,6 +269,12 @@ static void cdp_enable(void){
      password store no longer uses a Runtime binding (see pw_probe in features.inc). */
   i=cdp_id(); cdp("{\"id\":%d,\"method\":\"Network.enable\"}",i);
   i=cdp_id(); cdp("{\"id\":%d,\"method\":\"Browser.setDownloadBehavior\",\"params\":{\"behavior\":\"allow\",\"downloadPath\":\"%s\",\"eventsEnabled\":true}}",i,g_dlpath[0]?g_dlpath:"/tmp");
+  /* 0.88: a steady text caret. Chrome blinks it every 500 ms, and with everyNthFrame 2 an otherwise idle page only ever
+     sends the "caret off" frame, so text fields showed no caret at all (beta report: Bookmarks search field). CSS
+     caret-animation:manual (Chrome 139+) stops the blink; it also saves two frames a second while a field has focus. */
+#define ASB_CARET_JS "(function(){try{var s=new CSSStyleSheet();s.replaceSync('*{caret-animation:manual}');document.adoptedStyleSheets=document.adoptedStyleSheets.concat([s])}catch(e){}})()"
+  i=cdp_id(); cdp("{\"id\":%d,\"method\":\"Page.addScriptToEvaluateOnNewDocument\",\"params\":{\"source\":\"%s\"}}",i,ASB_CARET_JS);
+  i=cdp_id(); cdp("{\"id\":%d,\"method\":\"Runtime.evaluate\",\"params\":{\"expression\":\"%s\"}}",i,ASB_CARET_JS);
   /* navigator.webdriver: --disable-blink-features=AutomationControlled already makes it a plain false. The old JS
      override (own getter returning undefined) was itself a give-away, so it is gone. */
   feat_enable();
@@ -441,6 +449,22 @@ static void send_png_full(int cssw,int cssh,const unsigned char *png,int n){
   asbc_send(g_cli,ASBC_FRAME,g_pkt,(uint32_t)(14+n)); inflight_push();
 }
 static int g_clip_id;
+/* 0.88: the pointer shape for the client (ASBC_CURSOR: 0 arrow, 1 text, 2 hand, 3 wait). Headless Chrome reports no
+   cursor changes over CDP, so after mouse moves (one query in flight at a time) we ask the page what is under the
+   mouse: its computed CSS cursor, links/buttons as a hand. Sent only when it changes. */
+static long long now_ms(void);
+static int g_cur_id, g_cur_last=-1, g_cur_x, g_cur_y, g_cur_again; static long long g_cur_at;
+#define ASB_CURSOR_JS "(function(x,y){try{var e=document.elementFromPoint(x,y);while(e&&e.shadowRoot){var f=e.shadowRoot.elementFromPoint(x,y);if(!f||f==e)break;e=f}" \
+  "if(!e||e.tagName=='IFRAME'||e.tagName=='FRAME')return 'c0';var c=getComputedStyle(e).cursor;if(c=='pointer')return 'c2';if(c=='text'||c=='vertical-text')return 'c1';" \
+  "if(c=='wait'||c=='progress')return 'c3';if(c=='auto'){if(e.closest('a[href],area[href],button,summary,label[for],select'))return 'c2';" \
+  "if(e.isContentEditable||e.tagName=='TEXTAREA'||(e.tagName=='INPUT'&&!/^(button|submit|reset|checkbox|radio|image|range|color|file|hidden)$/i.test(e.type)))return 'c1'}return 'c0'}catch(z){return 'c0'}})(%d,%d)"
+static void cur_query(void){
+  if(g_cli<0 || g_ws<0) return;
+  if(g_cur_id && now_ms()-g_cur_at<1000){ g_cur_again=1; return; }   /* one in flight; ask again when it answers */
+  g_cur_id=cdp_id(); g_cur_at=now_ms(); g_cur_again=0;
+  cdp("{\"id\":%d,\"method\":\"Runtime.evaluate\",\"params\":{\"expression\":\"" ASB_CURSOR_JS "\",\"returnByValue\":true}}",g_cur_id,g_cur_x,g_cur_y); }
+static void cur_send(int c){
+  if(c==g_cur_last || g_cli<0) return; g_cur_last=c; unsigned char b=(unsigned char)c; asbc_send(g_cli,ASBC_CURSOR,&b,1); }
 static int g_skipped;
 static int g_frames_seen, g_shot_id; static long long g_shot_due;
 static long long now_ms(void){ struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t); return (long long)t.tv_sec*1000+t.tv_nsec/1000000; }
@@ -587,7 +611,7 @@ static void on_cdp(const char *msg){
     else if(!strcmp(st,"canceled")) send_status("Download canceled");
     return; }
   if(!strcmp(method,"Page.loadEventFired")||!strcmp(method,"Page.domContentEventFired")){
-    g_loading=0; send_meta();
+    g_loading=0; send_meta(); cur_query();   /* 0.88: a new page under a still pointer */
     /* a cross-process navigation (e.g. view-source: -> http) can silently end the screencast: restart it once the page has loaded */
     if(!strcmp(method,"Page.loadEventFired") && g_screencast_on && g_cli>=0){ cdp_screencast(0); cdp_screencast(1); g_frames_seen=0; g_shot_due=now_ms()+700; }
     int i=cdp_id();
@@ -601,6 +625,11 @@ static void on_cdp(const char *msg){
     char v[8000];
     int rid=json_int(msg,"id",0);
     if(json_str(msg,"value",v,sizeof v)){
+      if(g_cur_id && rid==g_cur_id){
+        g_cur_id=0; if(v[0]=='c' && v[1]>='0' && v[1]<='3' && !v[2]) cur_send(v[1]-'0');
+        if(g_cur_again) cur_query();
+        return;
+      }
       if(g_clip_id && rid==g_clip_id){
         g_clip_id=0;
         if(g_cli>=0 && v[0]) asbc_send(g_cli,ASBC_CLIP,v,(uint32_t)strlen(v));
@@ -672,6 +701,7 @@ static void bcon_tick(void){
   if(g_tabs_due && t>=g_tabs_due && g_cli>=0){ g_tabs_due=0; tabs_resync(); } }
 #include "bidi.inc"
 #include "audio.inc"
+#include "favicon.inc"
 
 static int g_mx, g_my;
 static int browser_switch(int want);
@@ -769,12 +799,14 @@ static void on_client(int op, unsigned char *p, int n){
     int i=cdp_id();
     cdp("{\"id\":%d,\"method\":\"Input.dispatchMouseEvent\",\"params\":{\"type\":\"%s\",\"x\":%d,\"y\":%d,\"button\":\"%s\",\"buttons\":%d,\"clickCount\":%d}}",
         i,type,x,y,button,buttons,(ty==ASBC_MDOWN||ty==ASBC_MUP)?1:0);
+    if(ty!=ASBC_MDOWN){ g_cur_x=x; g_cur_y=y; cur_query(); }
     break; }
   case ASBC_WHEEL:{
     if(n<2) break;
     int dy=asbc_get_i16(p); int i=cdp_id();
     cdp("{\"id\":%d,\"method\":\"Input.dispatchMouseEvent\",\"params\":{\"type\":\"mouseWheel\",\"x\":%d,\"y\":%d,\"deltaX\":0,\"deltaY\":%d}}",
         i,g_mx,g_my,dy);
+    g_cur_x=g_mx; g_cur_y=g_my; cur_query();   /* the page moved under the pointer */
     break; }
   case ASBC_KEY:{
     if(n<6) break;
@@ -1060,7 +1092,7 @@ int main(int argc, char **argv){
     if(n<0){ if(errno==EINTR) continue; break; }
     if(g_chrome>0){ int st; waitpid(g_chrome,&st,WNOHANG); }
     stats_send(); audio_pump(); vq_pump();
-    bidi_cast_tick(); kick_tick();
+    bidi_cast_tick(); kick_tick(); fav_tick();
     if(g_idle_min>0){ static long long since; long long t=now_ms();
       if(g_cli>=0) since=0; else if(!since) since=t;
       else if(t-since>(long long)g_idle_min*60000){ fprintf(stderr,"asb-chromed: no client for %d min, exiting\n",g_idle_min); browser_stop(); return 0; } }
@@ -1087,7 +1119,7 @@ int main(int argc, char **argv){
         if(hs){ static time_t lastlog; static int quiet; time_t now=time(NULL);
           if(now!=lastlog){ fprintf(stderr,"asb-chromed: client %s rejected (%s)%s\n",inet_ntoa(a.sin_addr),hs==-2?"bad token":"bad handshake",quiet?" [more suppressed]":""); lastlog=now; quiet=0; } else quiet++;
           ban_fail(a.sin_addr.s_addr); close(c); }
-        else { if(g_cli>=0){ const char *rm="replaced by another client"; asbc_send(g_cli,ASBC_STATUS,rm,(uint32_t)strlen(rm)); close_cli(); } g_cli=c; g_bm_want=0; pf_reset(); inflight_reset(); g_vlat_ms=0; g_avdelay_ms=0; vq_clear(); free(g_pend); g_pend=NULL; fprintf(stderr,"asb-chromed: client connected\n"); send_status("connected"); }
+        else { if(g_cli>=0){ const char *rm="replaced by another client"; asbc_send(g_cli,ASBC_STATUS,rm,(uint32_t)strlen(rm)); close_cli(); } g_cli=c; g_bm_want=0; g_cur_last=-1; g_cur_id=0; pf_reset(); inflight_reset(); g_vlat_ms=0; g_avdelay_ms=0; vq_clear(); free(g_pend); g_pend=NULL; fprintf(stderr,"asb-chromed: client connected\n"); send_status("connected"); }
       }
     }
     if(g_cli>=0 && FD_ISSET(g_cli,&rf)){

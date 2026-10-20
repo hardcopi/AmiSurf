@@ -43,6 +43,7 @@ Everything stays in the drawer (0.86, AmiStudio suite rule)
   is left behind.
     Data/AmiSurf.prefs    Settings (Save) and Sound sync; "Use" is for this run
     Data/AmiSurf.window   the window position and size
+    Data/Favicons/        bookmarks bar site icons (0.88; safe to delete)
     AmiSurf.log (.old)    the log
   This Amiga's AmiStudio identity (ClientId, HostToken, Host) is taken from
   the first of these drawers that has a ClientId file:
@@ -109,7 +110,8 @@ Tooltypes (or use the settings window, A-,)
              bandwidth of 8-bit, for slow links). A-M or View/menu mutes.
   FRAMES=QOI                old compressed frames (default: pre-converted)
   LOG=<file>|OFF            Amiga-side log (default PROGDIR:AmiSurf.log), see Logs
-  BOOKMARKSBAR=ON|OFF       bookmarks bar under the address bar (Amiga-B; default ON)
+  BOOKMARKSBAR=ON|OFF       bookmarks bar under the address bar (Amiga-B; default ON;
+             right mouse button on the bar: Edit, Hide from bar, Hide bookmarks bar)
 Keys: A-L address, A-T/W tab, A-Shift-T reopen, A-F find, A-G next,
   A-+/-/0 zoom, A-D bookmark, A-B bookmarks bar, A-O bookmarks, A-Y history, A-J downloads,
   A-S png, A-P pdf, A-U source, A-M mute, F10 full screen, Help about, A-Q quit.

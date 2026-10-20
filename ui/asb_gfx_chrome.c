@@ -1,6 +1,6 @@
 /* AmiSurf — 68k ASBC client. Chrome on the Linux host does the page. */
-#define ASB_VERSION "0.87"
-static const char asb_ver[] __attribute__((used)) = "$VER: AmiSurf 0.87 (19.10.2026)";
+#define ASB_VERSION "0.88"
+static const char asb_ver[] __attribute__((used)) = "$VER: AmiSurf 0.88 (20.10.2026)";
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <intuition/intuition.h>
@@ -55,13 +55,12 @@ static const char asb_ver[] __attribute__((used)) = "$VER: AmiSurf 0.87 (19.10.2
 #define STBI_MAX_DIMENSIONS 4096
 #include "../third_party/stb/stb_image.h"
 
-/* 0.87: the stack. The icons carry no stack size, so from Workbench AmiSurf got the default stack (MUI 5 warns
-   below 32 KB; in FS-UAE it overflowed at 4-12 KB), and this __stack was ignored: libnix only swaps to a stack of
-   __stack bytes when its __stkinit startup module is linked, which the reference below does. the beta-reported Guru 8000 0004
-   right after Settings... (0.85) is put down to that overflow. 256 KB is far above what we use (~11 KB). */
-unsigned long __stack = 262144;
-extern void __stkinit(void);
-void *__asb_stkinit __attribute__((used)) = (void*)__stkinit;
+/* 0.88: the stack. 0.87 linked libnix's __stkinit, which copies the running stack between tc_SPUpper and the stack
+   pointer. A beta tester's 0.87 logs (AmiStudio launcher, Kickstart 45.66 on Amiberry) said "262144 of 262144 bytes used" at
+   startup: there the task's tc_SPLower/tc_SPUpper did not describe the stack AmiSurf was running on, so that copy and
+   the new stack pointer were wrong and AmiSurf ran outside its stack (the Gurus closing About, at the menu button and
+   on a resize). main() in asb_log.inc now switches to a fresh 256 KB stack of its own with exec's StackSwap(), which
+   does not depend on what those fields said before. */
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *P96Base, *CyberGfxBase, *SocketBase;
@@ -87,7 +86,12 @@ static int g_bmh, g_bmbar=1;   /* g_bmbar: BOOKMARKSBAR pref; 0.87: GadTools boo
 #define URLX (4+NLEFT*BSTEP+6)
 #define LOCKW (IC_SZ+4)  /* padlock in front of the address */
 static int g_fd=-1, g_loading, g_last_btn, g_find_on;
-static char g_url[2400]="https://example.com/";
+static char g_url[2400]="";   /* 0.88: was "https://example.com/", navigated on every start (a beta tester) */
+/* 0.88: what AmiSurf opens at start (STARTPAGE= 0 home, 1 blank, 2 STARTURL) and in a new tab (NEWTAB= 0 blank, 1 home,
+   2 NEWTABURL). A URL on the command line or in URL=/START= still wins at start (g_url_set). */
+static int g_startpage, g_newtabpage, g_url_set; static char g_starturl[600], g_newtaburl[600];
+static const char *pg_key(int v,int home0){ return v==2?"URL":(v==(home0?0:1))?"HOME":"BLANK"; }
+static int pg_val(const char *v,int home0){ return !strcasecmp(v,"URL")?2:!strcasecmp(v,"HOME")?(home0?0:1):!strcasecmp(v,"BLANK")?(home0?1:0):(home0?0:0); }
 static char g_title[128]="AmiSurf";
 static char g_token[ASBC_MAX_TOKEN+1];
 static char g_home[2400]="";   /* 0.81: empty = the host's home page (Host settings); was the DuckDuckGo search page */
@@ -128,7 +132,7 @@ static void ttext(int x,int y,const char *s);
 static int url_editing(void);
 static void send_hello(void);
 #ifndef ASP_MUI
-static void gt_bm_draw(void); static void gt_bm_click(int mx,int newtab);
+static void gt_bm_draw(void); static void gt_bm_click(int mx,int newtab); static void gt_bm_ctx(int mx);
 #endif
 static int g_bm_dirty;
 static void pair_now(void); static void forget_token(int ask); static void host_menu(void); static void avsync_nudge(int d); static void avsync_menu(void);
@@ -147,7 +151,7 @@ enum { M_NONE, M_NEWTAB, M_REOPEN, M_ZOOMIN, M_ZOOMOUT, M_ZOOM0, M_FIND, M_BOOKM
        M_HOSTSET, M_SAVEPNG, M_SAVEHTML, M_SAVEPDF, M_PRINT, M_SOURCE, M_SETTINGS, M_FULL, M_STATS, M_ABOUT, M_QUIT, M_TABLEFT, M_TABRIGHT,
        M_OPENTAB, M_OPEN, M_COPYLINK, M_SAVEIMG, M_COPYIMG, M_COPYSEL, M_BACK, M_FWD, M_RELOAD, M_BOOKMARK, M_SUGG,
        M_CLOSETAB, M_STOP, M_HOME, M_LOCATION, M_MUTE, M_PAIR, M_UNPAIR, M_HOSTMENU, M_AVMENU, M_AVLATER, M_AVEARLIER, M_AVRESET,
-       M_BMBAR, M_BMMENU, M_BMOPEN, M_BMFOLDER, M_BMMORE, M_NUM };
+       M_BMBAR, M_BMMENU, M_BMOPEN, M_BMFOLDER, M_BMMORE, M_BMCTX, M_NUM };
 static struct { char label[160]; int id; char arg[1200]; } g_pop[POPMAX];
 static volatile int g_popkind, g_sugsel=-1, g_pop_dirty, g_sugg_req; /* kind 1 menu 2 context 3 suggestions */
 
@@ -199,6 +203,20 @@ static void bm_add(void){ send_cmd("bookmark"); }
 static void open_page(const char *name){ send_cmd("page %s",name); }
 /* Home: the Amiga-side home page if one is set in Settings, else the host's (menu: Host settings) */
 static void go_home(void){ if(g_home[0]) send_nav(g_home); else if(g_fd>=0){ asb_log("home: host home page"); send_cmd("home"); } }
+/* 0.88: a new tab opens what Settings > New tab says. Only TABNEW, "newtab URL" and "home" (all engines have them). */
+static void url_from_input(const char *in,char *out,int cap);
+static void new_tab(void){
+  if(g_fd<0) return;
+  char nu[620]; url_from_input(g_newtaburl,nu,sizeof nu);   /* "aminet.net" in Settings = https://aminet.net (it opened about:blank) */
+  if(g_newtabpage==1){ if(g_home[0]) send_cmd("newtab %s",g_home); else { asbc_send(g_fd,ASBC_TABNEW,NULL,0); send_cmd("home"); } }
+  else if(g_newtabpage==2 && g_newtaburl[0]) send_cmd("newtab %s",nu);
+  else asbc_send(g_fd,ASBC_TABNEW,NULL,0); }
+/* 0.88: the first connection opens the start page (beta report: it opened example.com, not the home page) */
+static void start_page(void){
+  if(g_url_set && g_url[0]){ asb_log("start: %s (given)",g_url); send_nav(g_url); }
+  else if(g_startpage==1){ asb_log("start: blank page"); send_nav("about:blank"); }
+  else if(g_startpage==2 && g_starturl[0]){ char su[620]; url_from_input(g_starturl,su,sizeof su); asb_log("start: %s",su); send_nav(su); }
+  else { asb_log("start: home page"); go_home(); } }
 static void prefs_load(void){
   FILE *f=fopen(PREF_FILE,"r");   /* 0.86: in the drawer (store_migrate() moved the ENVARC:/ENV: ones) */
   if(!f) return;
@@ -209,10 +227,14 @@ static void prefs_load(void){
     else if(!strncasecmp(l,"CHROMEHOST=",11) && l[11]) snprintf(g_host,sizeof g_host,"%s",l+11);
     else if(!strncasecmp(l,"PORT=",5)) g_port=atoi(l+5);
     else if(!strncasecmp(l,"TOKEN=",6)) snprintf(g_token,sizeof g_token,"%s",l+6);
-    else if(!strncasecmp(l,"START=",6) && l[6]) snprintf(g_url,sizeof g_url,"%s",l+6);
+    else if(!strncasecmp(l,"START=",6) && l[6]){ snprintf(g_url,sizeof g_url,"%s",l+6); g_url_set=1; }
+    else if(!strncasecmp(l,"STARTPAGE=",10)) g_startpage=pg_val(l+10,1);
+    else if(!strncasecmp(l,"STARTURL=",9)) snprintf(g_starturl,sizeof g_starturl,"%s",l+9);
+    else if(!strncasecmp(l,"NEWTAB=",7)) g_newtabpage=pg_val(l+7,0);
+    else if(!strncasecmp(l,"NEWTABURL=",10)) snprintf(g_newtaburl,sizeof g_newtaburl,"%s",l+10);
     else if(!strncasecmp(l,"SCREENMODE=",11) && l[11]) theme_tooltype("SCREENMODE",l+11);
     else if(!strncasecmp(l,"BROWSER=",8)) theme_tooltype("BROWSER",l+8);
-    else if(!strncasecmp(l,"URL=",4) && l[4]) snprintf(g_url,sizeof g_url,"%s",l+4);
+    else if(!strncasecmp(l,"URL=",4) && l[4]){ snprintf(g_url,sizeof g_url,"%s",l+4); g_url_set=1; }
     else { char *eq=strchr(l,'='); if(eq){ *eq=0; theme_tooltype(l,eq+1); } else theme_tooltype(l,NULL); }
   }
   fclose(f);
@@ -234,8 +256,8 @@ static void tooltypes_load(int argc, char **argv){
       for(int i=0;k[i];i++) if((v=FindToolType(d->do_ToolTypes,(STRPTR)k[i]))) theme_tooltype(k[i],(char*)v);
       if(FindToolType(d->do_ToolTypes,(STRPTR)"MODEREQ")) theme_tooltype("MODEREQ",NULL); }
     if((v=FindToolType(d->do_ToolTypes,(STRPTR)"HOME"))) snprintf(g_home,sizeof g_home,"%s",strcmp((char*)v,OLD_DEFAULT_HOME)?(char*)v:"");
-    if((v=FindToolType(d->do_ToolTypes,(STRPTR)"URL"))) snprintf(g_url,sizeof g_url,"%s",(char*)v);
-    if((v=FindToolType(d->do_ToolTypes,(STRPTR)"START"))) snprintf(g_url,sizeof g_url,"%s",(char*)v);
+    if((v=FindToolType(d->do_ToolTypes,(STRPTR)"URL"))){ snprintf(g_url,sizeof g_url,"%s",(char*)v); g_url_set=1; }
+    if((v=FindToolType(d->do_ToolTypes,(STRPTR)"START"))){ snprintf(g_url,sizeof g_url,"%s",(char*)v); g_url_set=1; }
     FreeDiskObject(d);
   }
   CurrentDir(old); CloseLibrary(IconBase);
@@ -853,6 +875,28 @@ static void send_nav(const char *u){
   if(u!=g_url) snprintf(g_url,sizeof g_url,"%s",u);
   g_loading=1; asbc_send(g_fd,ASBC_NAV,u,n);
 }
+/* 0.88: a hand pointer over links and buttons (a beta tester). A 0.88+ engine sends ASBC_CURSOR (0 arrow, 1 text, 2 hand,
+   3 wait) for the element under the mouse; we show the hand while the pointer is over the page, the normal pointer
+   everywhere else. An older engine never sends it: the pointer just stays as it is. */
+static const UWORD hand_spr[]={0,0,
+  0x0000,0x0600,0x0600,0x0f00,0x0600,0x0f00,0x0600,0x0f00,0x0600,0x0fc0,0x06c0,0x0ff8,0x06d8,0x0ffe,0x06da,0xefff,
+  0x67fe,0xffff,0x77fe,0xffff,0x3ffe,0x7fff,0x3ffc,0x7ffe,0x1ffc,0x3ffe,0x1ff8,0x3ffc,0x0ff8,0x1ffc,0x0000,0x1ffc,
+  0,0};
+static UWORD *g_hand_chip; static int g_ptr_host, g_ptr_in, g_ptr_now; static struct Window *g_ptr_win;
+static void ptr_apply(void){
+  int want=(g_ptr_in && g_ptr_host==2)?2:0;
+  if(!win) return;
+  if(g_ptr_win!=win){ g_ptr_win=win; g_ptr_now=0; }   /* a reopened window starts with the normal pointer */
+  if(want==g_ptr_now) return;
+  if(want==2){
+    if(!g_hand_chip && (g_hand_chip=(UWORD*)AllocMem(sizeof hand_spr,MEMF_CHIP))) CopyMem((APTR)hand_spr,g_hand_chip,sizeof hand_spr);
+    if(!g_hand_chip) return;
+    SetPointer(win,g_hand_chip,16,16,-5,0);
+    { static int once; if(!once){ once=1; asb_log("pointer: hand"); } } }
+  else ClearPointer(win);
+  g_ptr_now=want; }
+static void ptr_inside(int in){ if(in!=g_ptr_in){ g_ptr_in=in; ptr_apply(); } }
+static void ptr_free(void){ if(win && g_ptr_now){ ClearPointer(win); g_ptr_now=0; } if(g_hand_chip){ FreeMem(g_hand_chip,sizeof hand_spr); g_hand_chip=NULL; } }
 static void send_mouse(int x,int y,int buttons,int ty){
   if(g_fd<0) return; y-=TOP; if(y<0||x<0) return;
   int dw=g_W, dh=content_h();
@@ -1165,8 +1209,24 @@ static void print_page(void){
   char m[80]; if(err) snprintf(m,sizeof m,"Print failed (printer.device error %ld) - try Save page as PDF",(long)err); else snprintf(m,sizeof m,"Printed");
   CloseDevice((struct IORequest*)io); DeleteIORequest((struct IORequest*)io); DeleteMsgPort(mp);
   set_status(m); }
+/* 0.88: keys prefs_write owns; any other line in the file (HOSTMODE=, SERVICE=, AUTOHOST=, SOUND=, DEBUG, ...) is kept as it was.
+   0.87's Save rewrote the file from scratch, so Save in Settings silently dropped e.g. HOSTMODE=LEGACY. */
+static int prefs_owned(const char *l){
+  static const char *k[]={"CHROMEHOST","PORT","TOKEN","HOME","THEME","SCREENFONT","TOOLBAR","UIFONT","BROWSER","AVSYNC",
+    "BOOKMARKSBAR","STARTPAGE","NEWTAB","STARTURL","NEWTABURL","SCREENMODE","MODEREQ",0};
+  while(*l==' '||*l=='\t') l++;
+  for(int i=0;k[i];i++){ size_t n=strlen(k[i]); if(!strncasecmp(l,k[i],n)&&(l[n]=='='||l[n]=='\n'||l[n]=='\r'||l[n]==0||l[n]==' ')) return 1; }
+  return 0; }
 static void prefs_write(const char *path){
+  static char keep[3000]; int kn=0;
+  { FILE *o=fopen(path,"r"); char ln[700];
+    if(o){ while(fgets(ln,sizeof ln,o)){ size_t n=strlen(ln); if(!n||ln[0]=='\n'||prefs_owned(ln)) continue;
+             if(ln[n-1]!='\n'&&n<sizeof ln-1){ ln[n++]='\n'; ln[n]=0; }
+             if(kn+(int)n<(int)sizeof keep-1){ memcpy(keep+kn,ln,n); kn+=(int)n; } }
+           fclose(o); } }
+  keep[kn]=0;
   FILE *f=fopen(path,"w"); if(!f) return;
+  if(kn) fputs(keep,f);
   if(g_host[0]) fprintf(f,"CHROMEHOST=%s\n",g_host);
   if(g_port) fprintf(f,"PORT=%d\n",g_port);
   if(g_token[0]) fprintf(f,"TOKEN=%s\n",g_token);
@@ -1174,11 +1234,18 @@ static void prefs_write(const char *path){
   if(g_uifont[0]) fprintf(f,"UIFONT=%s/%d\n",g_uifont,g_uisize);
   if(g_browser) fprintf(f,"BROWSER=%s\n",g_browser==2?"FIREFOX":"CHROME");
   if(g_avsync_user) fprintf(f,"AVSYNC=%d\n",g_avsync_user);
-  fprintf(f,"BOOKMARKSBAR=%s\n",g_bmbar?"ON":"OFF");   /* 0.84: the Sound sync menu's correction */
+  fprintf(f,"BOOKMARKSBAR=%s\n",g_bmbar?"ON":"OFF");
+  fprintf(f,"STARTPAGE=%s\nNEWTAB=%s\n",pg_key(g_startpage,1),pg_key(g_newtabpage,0));
+  if(g_starturl[0]) fprintf(f,"STARTURL=%s\n",g_starturl);
+  if(g_newtaburl[0]) fprintf(f,"NEWTABURL=%s\n",g_newtaburl);   /* 0.84: the Sound sync menu's correction */
   if(g_wbmode) fprintf(f,"SCREENMODE=WB\n"); else if(g_modereq) fprintf(f,"MODEREQ\n");
   else if(g_modeid!=INVALID_ID) fprintf(f,"SCREENMODE=%08lx\n",(unsigned long)g_modeid);
   else fprintf(f,"SCREENMODE=FULL\n");
   fclose(f); }
+/* 0.88: Settings > Start and new tabs (stored by settings_apply's Save) */
+static void pages_apply(int sp,const char *su,int nt,const char *nu){
+  g_startpage=sp>=0&&sp<=2?sp:0; g_newtabpage=nt>=0&&nt<=2?nt:0;
+  scopy_u(g_starturl,sizeof g_starturl,su?su:""); scopy_u(g_newtaburl,sizeof g_newtaburl,nu?nu:""); }
 /* store the Settings window's values (both front ends) */
 static void settings_apply(const char *host,int port,const char *token,const char *home,const char *uifont,int theme,int fnt,int tool,int mode,int browser,int save){
     int obr=g_browser; g_browser=browser>=0&&browser<=2?browser:0;
@@ -1192,7 +1259,10 @@ static void settings_apply(const char *host,int port,const char *token,const cha
     g_theme_pro=theme; g_font_topaz=fnt; g_large=tool; g_wbmode=mode==0; g_modereq=mode==2; if(mode!=1) g_modeid=INVALID_ID; /* 0 window, 1 full screen, 2 full screen + ask */
     if(save){ data_dir(); prefs_write(PREF_FILE); }   /* 0.86: Use = this run only (no ENV: copy) */
     int nlook=g_theme_pro*1000+g_font_topaz*100+g_large*10+(g_wbmode?0:g_modereq?2:1); char nuf[64]; snprintf(nuf,sizeof nuf,"%s/%d",g_uifont,g_uisize);
-    set_status(olook!=nlook||strcmp(ouf,nuf)?"Settings saved - restart AmiSurf for the new look":"Settings saved");
+    /* 0.88: Use keeps the settings for this run only (Amiga Use = ENV:, which the suite never writes); say so instead of "saved" */
+    if(olook!=nlook||strcmp(ouf,nuf)) set_status(save?"Settings saved - restart AmiSurf for the new look":"Settings in use - the new look needs Save and a restart");
+    else set_status(save?"Settings saved":"Settings in use until you quit - Save keeps them");
+    asb_log("settings: %s",save?"saved to " PREF_FILE:"in use for this run (not saved)");
     if(strcmp(oh,g_host)||op!=g_port||strcmp(ot,g_token)){ asb_log("settings: host %s:%d%s",g_host,g_port,strcmp(ot,g_token)?" (new token)":""); reconnect_soon(); }
     else if(obr!=g_browser && g_browser && g_fd>=0){ send_hello(); set_status(g_browser==2?"Switching the host to Firefox...":"Switching the host to Chrome..."); } }
 #ifndef ASP_MUI
@@ -1200,7 +1270,7 @@ static void settings_open(void){
   if(!GadToolsBase) GadToolsBase=OpenLibrary((STRPTR)"gadtools.library",39);
   if(!GadToolsBase){ set_status("Settings need gadtools.library V39"); return; }
   APTR vi=GetVisualInfo(scr,TAG_END); if(!vi) return;
-  struct Gadget *gl=NULL, *g=CreateContext(&gl), *gad[13];
+  struct Gadget *gl=NULL, *g=CreateContext(&gl), *gad[17];
   struct NewGadget ng; memset(&ng,0,sizeof ng);
   struct TextAttr *ta=scr->Font; int fh=ta?ta->ta_YSize:8; int rh=fh+8;
   int bl=scr->WBorLeft+4, bt=scr->WBorTop+fh+1+8, lw=fh*11, gw=fh*30;
@@ -1210,7 +1280,9 @@ static void settings_open(void){
   static STRPTR cy_mode[]={(STRPTR)"Workbench window",(STRPTR)"Full screen (RTG, else AGA)",(STRPTR)"Full screen, ask mode",NULL};
   static STRPTR cy_br[]={(STRPTR)"Host default",(STRPTR)"Chrome",(STRPTR)"Firefox",NULL};
   char uif[64]=""; if(g_uifont[0]) snprintf(uif,sizeof uif,"%s/%d",g_uifont,g_uisize);
-  int theme=g_theme_pro, fnt=g_font_topaz, tool=g_large, mode=g_wbmode?0:g_modereq?2:1, br=g_browser;
+  int theme=g_theme_pro, fnt=g_font_topaz, tool=g_large, mode=g_wbmode?0:g_modereq?2:1, br=g_browser, stp=g_startpage, ntp=g_newtabpage;
+  static STRPTR cy_start[]={(STRPTR)"Home page",(STRPTR)"Blank page",(STRPTR)"This page:",NULL};
+  static STRPTR cy_newtab[]={(STRPTR)"Blank page",(STRPTR)"Home page",(STRPTR)"This page:",NULL};
   ng.ng_VisualInfo=vi; ng.ng_TextAttr=ta; ng.ng_Flags=PLACETEXT_LEFT; ng.ng_Height=fh+6; ng.ng_Width=gw; ng.ng_LeftEdge=bl+lw;
   int r=0;
 #define ROW(lbl,id) ng.ng_TopEdge=bt+(r++)*rh; ng.ng_GadgetText=(STRPTR)lbl; ng.ng_GadgetID=id
@@ -1219,6 +1291,10 @@ static void settings_open(void){
   ROW("Token",2); gad[2]=g=CreateGadget(STRING_KIND,g,&ng,GTST_String,(ULONG)g_token,GTST_MaxChars,ASBC_MAX_TOKEN,TAG_END);
   ROW("Home page",3); gad[3]=g=CreateGadget(STRING_KIND,g,&ng,GTST_String,(ULONG)g_home,GTST_MaxChars,500,TAG_END);
   ROW("Browser",12); gad[12]=g=CreateGadget(CYCLE_KIND,g,&ng,GTCY_Labels,(ULONG)cy_br,GTCY_Active,br,TAG_END);
+  ROW("On startup",13); gad[13]=g=CreateGadget(CYCLE_KIND,g,&ng,GTCY_Labels,(ULONG)cy_start,GTCY_Active,stp,TAG_END);
+  ROW("  This page",14); gad[14]=g=CreateGadget(STRING_KIND,g,&ng,GTST_String,(ULONG)g_starturl,GTST_MaxChars,590,TAG_END);
+  ROW("New tab",15); gad[15]=g=CreateGadget(CYCLE_KIND,g,&ng,GTCY_Labels,(ULONG)cy_newtab,GTCY_Active,ntp,TAG_END);
+  ROW("  This page",16); gad[16]=g=CreateGadget(STRING_KIND,g,&ng,GTST_String,(ULONG)g_newtaburl,GTST_MaxChars,590,TAG_END);
   ROW("Theme",4); gad[4]=g=CreateGadget(CYCLE_KIND,g,&ng,GTCY_Labels,(ULONG)cy_theme,GTCY_Active,theme,TAG_END);
   ROW("Screen font",5); gad[5]=g=CreateGadget(CYCLE_KIND,g,&ng,GTCY_Labels,(ULONG)cy_font,GTCY_Active,fnt,TAG_END);
   ROW("UI font",6); gad[6]=g=CreateGadget(STRING_KIND,g,&ng,GTST_String,(ULONG)uif,GTST_MaxChars,60,TAG_END);
@@ -1246,8 +1322,9 @@ static void settings_open(void){
       else if(cl==IDCMP_VANILLAKEY && code==13){ done=1; act=10; }
       else if(cl==IDCMP_REFRESHWINDOW){ GT_BeginRefresh(w); GT_EndRefresh(w,TRUE); }
       else if(cl==IDCMP_GADGETUP){ int id=gg->GadgetID;
-        if(id==12) br=code; else if(id==4) theme=code; else if(id==5) fnt=code; else if(id==7) tool=code; else if(id==8) mode=code;
+        if(id==12) br=code; else if(id==13) stp=code; else if(id==15) ntp=code; else if(id==4) theme=code; else if(id==5) fnt=code; else if(id==7) tool=code; else if(id==8) mode=code;
         else if(id>=9 && id<=11){ done=1; act=id; } } } }
+  if(act==9||act==10) pages_apply(stp,(char*)((struct StringInfo*)gad[14]->SpecialInfo)->Buffer,ntp,(char*)((struct StringInfo*)gad[16]->SpecialInfo)->Buffer);
   if(act==9||act==10) settings_apply((char*)((struct StringInfo*)gad[0]->SpecialInfo)->Buffer,(int)((struct StringInfo*)gad[1]->SpecialInfo)->LongInt,
       (char*)((struct StringInfo*)gad[2]->SpecialInfo)->Buffer,(char*)((struct StringInfo*)gad[3]->SpecialInfo)->Buffer,
       (char*)((struct StringInfo*)gad[6]->SpecialInfo)->Buffer,theme,fnt,tool,mode,br,act==9);
@@ -1262,7 +1339,7 @@ static void settings_open(void){
 static void do_menu(int id,const char *arg){
   unsigned char ix;
   switch(id){
-  case M_NEWTAB: if(g_fd>=0) asbc_send(g_fd,ASBC_TABNEW,NULL,0); break;
+  case M_NEWTAB: new_tab(); break;
   case M_REOPEN: send_cmd("reopen"); break;
   case M_TABLEFT: if(g_tab>0) send_cmd("tabmove %d %d",g_tab,g_tab-1); break;
   case M_TABRIGHT: if(g_tab+1<g_ntab) send_cmd("tabmove %d %d",g_tab,g_tab+1); break;
@@ -1306,6 +1383,7 @@ static void do_menu(int id,const char *arg){
   case M_BMOPEN: bm_open(atoi(arg),qual_shift()); break;
   case M_BMFOLDER: menu_bm_folder(atoi(arg),g_popx,g_popy); break;
   case M_BMMORE: menu_bm_rest(g_popx,g_popy); break;
+  case M_BMCTX:{ const char *sp=strchr(arg,' '); bm_ctx_do(atoi(arg),sp?atoi(sp+1):0); break; }   /* "slot action" */
   case M_CLOSETAB: ix=(unsigned char)g_tab; if(g_fd>=0) asbc_send(g_fd,ASBC_TABCLS,&ix,1); break;
   case M_STOP: if(g_fd>=0) asbc_send(g_fd,ASBC_STOP,NULL,0); break;
   case M_HOME: go_home(); break;
@@ -1323,7 +1401,7 @@ static int shortcut(int c,int shift){
   case '.': if(g_fd>=0) asbc_send(g_fd,ASBC_STOP,NULL,0); return 1;
   case 'f': find_show(1); return 1;
   case 'g': if(!g_find_on) find_show(1); else send_cmd(shift?"findprev":"findnext"); return 1;
-  case 't': if(shift) send_cmd("reopen"); else if(g_fd>=0) asbc_send(g_fd,ASBC_TABNEW,NULL,0); return 1;
+  case 't': if(shift) send_cmd("reopen"); else new_tab(); return 1;
   case 'w': ix=(unsigned char)g_tab; if(g_fd>=0) asbc_send(g_fd,ASBC_TABCLS,&ix,1); return 1;
   case 'l': url_focus(); return 1;
   case '=': case '+': send_cmd("zoom +"); return 1;
@@ -1379,6 +1457,7 @@ static void pump(void){
     }
     else if(op==ASBC_SCROLL){ if(n>=10) apply_scroll(g_jbuf); asbc_send(g_fd,ASBC_ACK,NULL,0); }
     else if(op==ASBC_META) apply_meta(g_jbuf,n);
+    else if(op==ASBC_CURSOR){ if(n>=1){ static int once; if(!once){ once=1; asb_log("pointer: the engine sends pointer shapes (hand over links)"); } g_ptr_host=g_jbuf[0]; ptr_apply(); } }
     else if(op==ASBC_STATUS){
       int m=n<(int)sizeof g_status-1?n:(int)sizeof g_status-1;
       memcpy(g_status,g_jbuf,(size_t)m); g_status[m]=0;
@@ -1395,6 +1474,7 @@ static void pump(void){
       set_status(g_status);
     } else if(op==ASBC_TABS) apply_tabs(g_jbuf,n);
     else if(op==ASBC_BMARKS) bm_apply(g_jbuf,n);
+    else if(op==ASBC_FAVICON) fav_recv(g_jbuf,n);
     if(!sock_pending(g_fd)) break;
     /* 0.77: never let a stream of frames starve the mouse and keyboard (on a slow Amiga a playing video kept
        this loop busy for many seconds, so a menu click seemed to hang the machine) */
@@ -1460,7 +1540,7 @@ static void log_startup(void){
     "GadTools",
 #endif
     cpu,(af&(AFF_68881|AFF_FPU40))?"+FPU":"",SysBase->LibNode.lib_Version,SysBase->SoftVer,g_logpath);
-  STKLOG("startup");
+  stack_log_start(); STKLOG("startup");
 #ifdef ASP_MUI
   asb_log("MUI muimaster.library %d.%d",MUIMasterBase?MUIMasterBase->lib_Version:0,MUIMasterBase?MUIMasterBase->lib_Revision:0);
 #endif
@@ -1510,8 +1590,9 @@ static void connected_ok(int s){
   g_fd=s; snprintf(g_status,sizeof g_status,"connected"); asb_log("connected to %s:%d",g_th,g_tp);
   g_rc_fail=0; g_av_sent=0;
   send_hello();
-  send_cmd("bookmarks");   /* 0.87: the list for the bookmarks bar (an older engine ignores it) */
-  if(g_url[0]) send_nav(g_url); }
+  send_cmd("bookmarks 2");   /* 0.87: the list for the bookmarks bar (an older engine ignores it); 0.88: "2" = with flags (a 0.87 engine ignores the 2) */
+  static int started; if(!started){ started=1; start_page(); }
+  else if(g_url[0]) send_nav(g_url); }   /* a reconnect reopens the page we were on */
 /* connect() bounded by a timer signal in bsdsocket's break mask (the call returns EINTR). No non-blocking connect:
    in UAE's bsdsocket emulation a socket connected that way stopped waking WaitSelect() (the window froze until
    some other input came - seen in FS-UAE while testing 0.81). */
@@ -1647,7 +1728,8 @@ static void url_from_input(const char *in,char *out,int cap){
 
 /* ---------- input (shared by the Intuition and MUI front ends; coordinates relative to OX/OY) ---------- */
 static void ev_move(int mx,int my,UWORD qual){
-          if(g_popn && g_popkind!=3){ int r=pop_hit(mx,my); if(r!=g_pophov){ g_pophov=r; pop_draw(); } if(r>=0) return; }
+          if(g_popn && g_popkind!=3){ int r=pop_hit(mx,my); if(r!=g_pophov){ g_pophov=r; pop_draw(); } if(r>=0){ ptr_inside(0); return; } }
+          ptr_inside(my>=TOP && my<g_H-bot_h() && !g_popn);
           if(my>=TOP && my<g_H-bot_h()){
             int held=!!(qual&IEQUALIFIER_LEFTBUTTON);
             static int skip; skip++;
@@ -1677,6 +1759,9 @@ static void ev_button(UWORD code,int mx,int my){
 #ifndef ASP_MUI
           if(!left && !right && !up && g_bmh && my>=TABH+TOOLH && my<TOP){ gt_bm_click(mx,1); return; }   /* middle-click: new tab */
 #endif
+#ifndef ASP_MUI
+          if(right && !up && g_bmh && my>=TABH+TOOLH && my<TOP){ gt_bm_ctx(mx); return; }   /* 0.88: the bookmarks bar's own menu */
+#endif
           if(right){
             if(!up && my>=TOP && my<g_H-bot_h() && g_fd>=0){ /* our own context menu; Chrome's native one would be invisible */
               g_ctxx=mx; g_ctxy=my;
@@ -1690,7 +1775,7 @@ static void ev_button(UWORD code,int mx,int my){
             else if(my<TABH && !g_full){
               int n=g_ntab>0?g_ntab:1, tw=tab_w();
               int plus=4+n*tw;
-              if(mx>=plus && mx<plus+24){ if(g_fd>=0) asbc_send(g_fd,ASBC_TABNEW,NULL,0); }
+              if(mx>=plus && mx<plus+24) new_tab();
               else if(mx>=4){
                 int i=(mx-4)/tw;
                 if(i>=0 && i<n){
@@ -1755,7 +1840,7 @@ static void ev_vanilla(UWORD code,UWORD qual){
           else if(code==6){ if(!g_find_on) find_show(1); else send_find(); }
           else if(code==7){ if(g_find_on) send_cmd(shift?"findprev":"findnext"); else find_show(1); }
           else if(code==18){ if(g_fd>=0) asbc_send(g_fd,ASBC_RELOAD,NULL,0); }
-          else if(code==20){ if(g_fd>=0) asbc_send(g_fd,ASBC_TABNEW,NULL,0); }
+          else if(code==20) new_tab();
           else if(code==23){ unsigned char ix=(unsigned char)g_tab; if(g_fd>=0) asbc_send(g_fd,ASBC_TABCLS,&ix,1); }
           else if(code==3) page_clip(0);
           else if(code==24) page_clip(1);
@@ -1824,7 +1909,7 @@ static void relayout(void){
   send_hello(); draw();
   if(g_sg_ok && !g_full) RefreshGList(&g_sg,win,NULL,1); }
 static void url_focus(void){ if(g_sg_ok && !g_full){ g_omni_sel=1; g_url_clicks=0; ActivateGadget(&g_sg,win,NULL); } }
-int main(int argc, char **argv){
+static int asb_main(int argc, char **argv){
   stack_mark(); store_migrate(); prefs_load(); win_box_load();
   tooltypes_load(argc,argv);
   if(argc>0){
@@ -1835,7 +1920,7 @@ int main(int argc, char **argv){
       else if(strchr(argv[i],'=') && strncasecmp(argv[i],"http",4)){ char k[40]; const char *eq=strchr(argv[i],'='); int kl=(int)(eq-argv[i]); if(kl>39) kl=39; memcpy(k,argv[i],(size_t)kl); k[kl]=0; theme_tooltype(k,eq+1); }
       else if(!strcasecmp(argv[i],"MODEREQ")) theme_tooltype("MODEREQ",NULL);
       else if(!strcasecmp(argv[i],"STATS")) theme_tooltype("STATS",NULL);
-      else if(argv[i][0]!='-'){ snprintf(g_url,sizeof g_url,"%s",argv[i]); g_url_given=1; }
+      else if(argv[i][0]!='-'){ snprintf(g_url,sizeof g_url,"%s",argv[i]); g_url_given=1; g_url_set=1; }
     }
   }
   if(rexx_start()) return 0;   /* 0.85: another AmiSurf runs and took the URL */
@@ -1932,13 +2017,13 @@ int main(int argc, char **argv){
   }
   pop_win_close();
   rc_abort(); if(g_fd>=0) CloseSocket(g_fd);
-  STKLOG("quit"); asb_log("quit"); audio_close(); rexx_end(); qual_close(); bm_free();
+  ptr_free(); STKLOG("quit"); asb_log("quit"); audio_close(); rexx_end(); qual_close(); bm_free();
   win_box_save(win);
   free(g_scaled);
   if(g_sg_ok && !g_full) RemoveGadget(win,&g_sg);
   if(g_find_on) RemoveGadget(win,&g_fg);
   if(GadToolsBase) CloseLibrary(GadToolsBase);
-  CloseWindow(win); theme_pens_free(); icons_free(); free(g_chunky);
+  CloseWindow(win); theme_pens_free(); icons_free(); fav_free(); free(g_chunky);
   if(g_font) CloseFont(g_font);
   if(g_ownscr) CloseScreen(scr); else UnlockPubScreen(NULL,scr);
   if(AslBase) CloseLibrary(AslBase);
