@@ -1,0 +1,156 @@
+AmiSurf - web browser for the classic Amiga (part of AmiStudio)
+================================================================
+Formerly "AmiStudio Browser". Pages are rendered by Google Chrome (default)
+or Mozilla Firefox on a PC running the AmiStudio Host.
+AmiSurf is a thin client: it shows the page, sends mouse and
+keyboard input, and gives you an address bar, tabs, find, bookmarks,
+history, downloads (into ~/Downloads on the Host PC; Amiga-J lists them)
+and an ARexx port (AMISURF: OPENURL, FRONT, GETURL).
+The old from-scratch engine is kept in git (tag classic-final).
+
+Programs (start the one that fits your machine)
+  AmiSurf            MUI, 68040/68060 with FPU (the main version)
+  AmiSurf-020        MUI, 68020/68030 with a 68881/68882 FPU
+  AmiSurf-gadtools   no MUI needed (Intuition/GadTools), 68020+ FPU
+  On a machine without an FPU (or a 68040 binary on an 020) a requester
+  explains this and the program quits instead of crashing.
+
+Usage
+  1. On the PC (Linux) install the AmiStudio Host, with AmiSurf's engine
+     (asb-chromed) as its "browser" service: see the Host's INSTALL.md
+     (releases: https://github.com/hardcopi/AmiStudio-Releases).
+  2. Start AmiSurf. It finds the Host by itself, in this order:
+       HOST= tooltype / Settings Host field (name or address[:port])
+       the Host file of this Amiga's AmiStudio identity (see below)
+       127.0.0.1:9220      (an emulator on the Host PC: no pairing needed)
+       a LAN search        (UDP broadcast; the Host must run with --lan)
+  3. A real Amiga on the network must be paired once: AmiSurf asks
+     "Pair with Host"; on the PC run  amistudio-hostd pair  and type the
+     6-digit code. The token is saved next to this Amiga's ClientId (see
+     "Everything stays in the drawer"; installed by the AmiStudio launcher,
+     AmiSurf shares the launcher's token, so pairing there works too).
+  If the Host says no (not paired, no browser service, too old/new, busy,
+  refused) a requester tells you what to do; AmiSurf keeps retrying.
+  Pair again or unpair any time: menu Project > Pair with Host... /
+  Forget Host token... (MUI), or the menu button: AmiStudio Host (pair) ...
+  (all versions; shows the Host, the connection and where the token is).
+  Pairing again replaces the token; Forget deletes the HostToken file
+  (on the PC  amistudio-hostd revoke ID  unpairs there).
+
+Everything stays in the drawer (0.86, AmiStudio suite rule)
+  AmiSurf writes nothing to ENV:, ENVARC:, S:, T: or assigns. Copy the drawer
+  to another Amiga and it goes with all its settings; delete it and nothing
+  is left behind.
+    Data/AmiSurf.prefs    Settings (Save) and Sound sync; "Use" is for this run
+    Data/AmiSurf.window   the window position and size
+    AmiSurf.log (.old)    the log
+  This Amiga's AmiStudio identity (ClientId, HostToken, Host) is taken from
+  the first of these drawers that has a ClientId file:
+    AmiStudio/Prefs/      when the AmiStudio launcher installed AmiSurf in
+                          AmiStudio/Apps/AmiSurf (or AmiSurf is in the
+                          AmiStudio drawer itself): shared with the launcher
+    AmiSurf/Data/         otherwise; a new ClientId is made there once
+  Upgrading from 0.85 and older: at the first start AmiSurf moves its own
+  old ENVARC:/ENV: files into the drawer (AmiSurf.prefs, AmiSurf.window, the
+  AmiStudioBrowser.* ones) and deletes them there. The shared
+  ENVARC:AmiStudio/ClientId, HostToken and Host are only copied (so you stay
+  paired) and left in place: the AmiStudio launcher 0.1.8 moves and deletes
+  them. AmiSurf then uses its copy. MUI's own ENV:MUI/AMISURF*.prefs,
+  written on every quit, are removed again (unless you saved MUI settings
+  for AmiSurf yourself).
+
+AmiKit edition (AmiSurf-<version>-AmiKit.lha)
+  The drawer has a Host/ folder with its own AmiStudio Host (amistudio-hostd),
+  the engine (asb-chromed) and a portable Chromium. When AmiSurf finds no Host
+  on 127.0.0.1:9220 and AmiKit's Rabbit Hole (C:host-run) is there, it starts
+  Host/run-host.sh on Linux: the Host listens on 127.0.0.1 only (the emulator
+  needs no pairing) and starts the engine; both stop after 30 minutes without
+  AmiSurf. Without Rabbit Hole run  sh Host/run-host.sh  on Linux.
+  Moving to the standalone AmiStudio Host later: sh Host/move-to-host.sh
+  copies your bookmarks, history, passwords and logins over.
+  See Host/README-AMIKIT.txt.
+
+Older engines (HOSTMODE=LEGACY)
+  AmiSurf talks to the AmiStudio Host on port 9220. To use a plain
+  asb-chromed (0.81 and older) set HOSTMODE=LEGACY: AmiSurf then connects
+  with plain ASBC to 127.0.0.1:9223 (or CHROMEHOST=/PORT=/TOKEN=). In the
+  AmiKit edition AUTOHOST then starts Host/run-host.sh --legacy (the 0.82 way).
+
+Upgrading from AmiStudio Browser
+  Settings (ENVARC:AmiStudioBrowser.prefs) and the window position move into
+  the drawer (Data/) at the first start of 0.86 and the old files are deleted.
+  The engine keeps using ~/.config/amistudio-browser if ~/.config/amisurf
+  does not exist (bookmarks, history, passwords are kept).
+
+Tooltypes (or use the settings window, A-,)
+  HOST=pc[:port]            the AmiStudio Host (default: automatic, see Usage)
+  HOSTMODE=LEGACY           plain asb-chromed on 9223 instead of the Host
+  SERVICE=browser           the Host service to ask for
+  TOKEN=                    pairing token (default: the HostToken file, see above)
+  CHROMEHOST= PORT=         same as HOST= (0.81 names)
+  AVSYNC=OFF|<ms>           A/V sync correction: + = sound is late, hold the
+                            picture back more; - = picture sooner (relative,
+                            on top of what AmiSurf measures; menu: Sound sync,
+                            saved in the prefs; a tooltype wins at start)
+  URL= HOME=                start and home page
+  THEME=PRO                 dark theme
+  SCREENFONT=TOPAZ          Topaz screen font
+  UIFONT=helvetica/15       UI font and size
+  TOOLBAR=LARGE  (BIGUI)    bigger buttons and bars
+  BROWSER=CHROME|FIREFOX    which browser the host should use
+  SCREENMODE=WB (default: resizable window on the Workbench, size/position remembered in
+             Data/AmiSurf.window) | FULL (own RTG/AGA screen) | 0x... | 1280x800   MODEREQ
+  AUTOHOST=ON|OFF  HOSTCMD=...   AmiKit edition: start the Host (or with HOSTMODE=LEGACY the engine) in Host/
+             via Rabbit Hole (C:host-run) when nothing answers on 127.0.0.1; see Host/README-AMIKIT.txt
+  STATS                     fps / KB/s / ms per frame in the status bar, plus sound:
+             "snd P8 25/s 250ms u0" = Paula (P) or AHI, 8/16-bit or A(DPCM),
+             audio packets per second, jitter buffer, underruns
+  SOUND=ON|OFF|ADPCM        page sound streamed from the host (default ON; ADPCM = half the
+             bandwidth of 8-bit, for slow links). A-M or View/menu mutes.
+  FRAMES=QOI                old compressed frames (default: pre-converted)
+  LOG=<file>|OFF            Amiga-side log (default PROGDIR:AmiSurf.log), see Logs
+  BOOKMARKSBAR=ON|OFF       bookmarks bar under the address bar (Amiga-B; default ON)
+Keys: A-L address, A-T/W tab, A-Shift-T reopen, A-F find, A-G next,
+  A-+/-/0 zoom, A-D bookmark, A-B bookmarks bar, A-O bookmarks, A-Y history, A-J downloads,
+  A-S png, A-P pdf, A-U source, A-M mute, F10 full screen, Help about, A-Q quit.
+  Ctrl-C/X/V/A: copy, cut, paste, select all (address bar, find field and page).
+  Address bar: a click places the cursor; Backspace/Ctrl-H, Del and the cursor keys edit
+  one character. A-L selects the address (typing replaces it); after Ctrl-A, Backspace
+  or Del clear it.
+  Right-click on the page = context menu; over the toolbar = MUI menus.
+  In the MUI version drag-to-move tabs is replaced by View > Move tab
+  left/right (A-Shift-[ / ]). Drag a tab works in -gadtools.
+
+Sound
+  The host plays the browser into its own PulseAudio/PipeWire sink, captures it and sends
+  22 kHz stereo to the Amiga (needs a 0.74+ host with pactl/parec on Linux). The Amiga plays it
+  through AHI if ahi.device is installed (16-bit on the 040 build) or straight on Paula
+  (8-bit, audio.device), with ~250 ms of buffer so network hiccups don't click. Sound keeps
+  playing when video frames are dropped. Older hosts send no sound; older clients get none.
+
+Logs
+  Amiga side: PROGDIR:AmiSurf.log (next to the program; the previous run is kept
+  as AmiSurf.log.old, so a reboot after a crash does not lose it). It records the
+  version, CPU, Kickstart, MUI version, screen size/depth, connection events, menus opening
+  and closing, errors, main-loop stalls, and "@" breadcrumbs written before risky steps:
+  after a crash, the last "@" line is where it died. Each line is written and the file
+  closed again, so it survives a hang. LOG=<file> moves it, LOG=OFF turns it off.
+  Linux side: the AmiStudio Host logs to its terminal / journal
+  (journalctl --user -u amistudio-host) and the engine to
+  ~/.config/amistudio-host/browser.log. AmiKit edition:
+  AmiSurf/Host/data/host.log (Host) and Host/data/hostd/browser.log (engine).
+
+Requirements
+  * AmigaOS 3.1 or newer (3.2 / 3.9 recommended)
+  * MUI 3.8 or newer (MUI 5 recommended) for AmiSurf / -020
+  * 68040/060, or 68020/030 with an FPU (68881/68882)
+  * A bsdsocket.library TCP/IP stack (Roadshow, Miami, AmiTCP, Genesis)
+  * RAM: 16 MB Fast minimum; 64 MB+ recommended for image-heavy pages
+  * RTG (Picasso96, or CyberGraphX-compatible, 15-bit or deeper) recommended.
+    AGA / 8-bit screens work with dithered pens (less tested).
+
+Credits
+  Workbench icons: Ken's Icons (Kenneth's DualPNG icons, also shipped in
+  AmiKit). Toolbar icon shapes: Lucide (ISC). Frame decoding: stb_image, QOI.
+  Linux engine: OpenSSL, zlib, Zstandard; AmiKit edition: Chromium /
+  ungoogled-chromium. Details and licences: ATTRIBUTIONS and LICENSES.

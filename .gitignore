@@ -1,0 +1,32 @@
+# build outputs
+build/
+*.o
+*.objs/
+third_party/netsurf/**/*.o
+# emulator: never commit Amiga OS files, Kickstart ROMs, disk images or emulator binaries
+emu/hd/
+emu/local/
+*.rom
+*.ROM
+*.key
+*.adf
+*.adz
+*.dms
+*.hdf
+*.hdz
+*.ipf
+*.uae
+fs-uae/
+amiberry/
+# local state
+*.jar
+cookies*.txt
+.env
+.env.*
+*.log
+dist/amistudio-browser-amikit-host-*.tar.gz
+dist/amisurf-amikit-host-*.tar.gz
+dist/AmiSurf-*
+dist/SHA256SUMS-*
+dist/AmiStudioBrowser-*.lha
+dist/asb-chromed-*-linux-x86_64.tar.gz

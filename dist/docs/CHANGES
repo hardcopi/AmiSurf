@@ -1,0 +1,568 @@
+AmiSurf (formerly AmiStudio Browser) - changes
+0.87 (19.10.2026)
+  * Fixed the Guru 8000 0004 right after Settings... from the menu button
+    (beta report, AmiKit, MUI 5): AmiSurf ran on the small default stack
+    Workbench gives a program whose icon has no stack size (MUI 5 asks for at
+    least 32 KB), and the 256 KB stack it asks for was never set up. AmiSurf
+    now always switches to its own 256 KB stack at start, from Workbench or
+    the Shell, all three programs. The log notes stack use at menus, windows
+    and quit.
+  * Menu button (MUI 5): the chosen item runs on the next pass of the main
+    loop, after MUI has fully closed the popup, and the popup is freed only
+    when the next one is built; more log breadcrumbs around Settings.
+  * Bookmarks bar under the address bar (Firefox style): one button per
+    bookmark, one per folder (a popup with its bookmarks), and a » button
+    with whatever does not fit. Click opens the bookmark, Shift-click or the
+    middle mouse button opens it in a new tab. Turn it on and off with
+    Amiga B, View > Bookmarks bar, or the menu button; kept in
+    Data/AmiSurf.prefs (BOOKMARKSBAR=ON/OFF, also a tooltype).
+  * Menu button > Bookmarks: Bookmark this page, Show/Hide bookmarks bar,
+    Manage bookmarks, then your bookmarks with folders as submenus (MUI 5)
+    or as their own popup (MUI 3.x and the GadTools build).
+  * Bookmark folders: Manage bookmarks > Edit has a Folder field. The
+    bookmarks file keeps its format (the folder is an optional fourth
+    column). The bar and the list need the 0.87 engine (asb-chromed); with an
+    older engine the bar shows a Bookmarks button and a note.
+  * Engine: an idle connection to the internal pages server is closed
+    without a reply (a reply to it could show up as "forbidden" on the
+    next internal page).
+  * AmiKit edition: the AmiStudio Host 0.1.7 (amistudio-hostd, unchanged)
+    with AmiSurf 0.87's own engine and one portable Chromium in Host/
+    (Host/LAYOUT "own", as in 0.85), because the Host 0.1.7 engine is 0.85's
+    and has no bookmarks list. Everything still stays in Host/data,
+    downloads go to ~/Downloads. After upgrading from 0.86 the old
+    Host/amistudio-host/ folder is unused and can be deleted.
+0.86 (19.10.2026)
+  * Everything stays in the drawer (AmiStudio suite rule): AmiSurf no longer
+    writes ENV: or ENVARC:. Settings and the window box are in Data/, the
+    AmiStudio identity (ClientId, HostToken, Host) comes from the AmiStudio
+    launcher's Prefs/ when it installed AmiSurf, else from Data/. The first
+    start moves AmiSurf's own old ENVARC:/ENV: files (prefs, window) into
+    the drawer and deletes them; the shared ENVARC:AmiStudio/ClientId,
+    HostToken and Host are copied (you stay paired) and left for the
+    AmiStudio launcher 0.1.8 to move. ENV:MUI files MUI writes on quit are removed again.
+    Settings "Use" now changes only the running AmiSurf.
+  * AmiKit edition: bundles the AmiStudio Host 0.1.7 release unchanged (its
+    engine has the 0.85 download and new-tab fixes; one Chromium). The Host,
+    engine and Chromium keep everything under Host/data, including HOME, the
+    XDG folders and TMPDIR (a short /tmp link in deep drawers); downloads
+    still go to ~/Downloads. move-to-host.sh --to <AmiStudio>/Host copies
+    browser data to the AmiStudio launcher's Host.
+0.85 (17.10.2026)
+  * Downloads with the AmiStudio Host now show what happens (reported by
+    Rich): the status bar says "Downloading NAME to ~/Downloads on the Host
+    PC", then "Downloaded NAME (N KB) to ..." or "Download failed or
+    canceled: NAME ... - see the Downloads page". The Downloads page (menu
+    button > Downloads, Amiga-J) lists them with progress and where they
+    went. The files did land in ~/Downloads before, but Chrome only reports
+    downloads on its browser connection, which the engine did not have.
+  * Links that open a new tab (target=_blank, window.open, "Open link in
+    new tab") now show up at once (reported by Rich: only after a restart).
+    The engine follows Chrome's tab events and sends the tab list on every
+    new, closed or switched tab; a tab the page opened is shown at once. A
+    window.open() popup no longer stays a blank tab ("Debugger paused in
+    another tab"), and switching back to a tab shows its picture, not the
+    last one's.
+  * New: single instance and an ARexx port "AMISURF". Starting AmiSurf
+    with a URL while it runs opens the URL in a new tab of the running
+    copy, brings it to the front and quits. ARexx commands: OPENURL "<url>"
+    [NEWTAB], FRONT, GETURL. See docs/AREXX.md (in the source).
+  * The download and new-tab fixes are in the engine (asb-chromed): they
+    reach you with an AmiStudio Host that has them.
+0.84 (17.10.2026)
+  * A/V sync on Amiberry: the sound was ~300 ms late (AmiKit, reported by
+    Rich). Amiberry buffers sound after Paula/AHI (its own buffers plus the
+    SDL device), which the 0.81 calibration in FS-UAE never saw. AmiSurf now
+    detects Amiberry (uae.resource host-platform call, or C:host-run) and
+    counts 300 ms of output delay after the audio device: the picture is
+    held back that much more and less sound is buffered. The log says what
+    was found ("av: Amiberry (uae.resource ...), sound output latency after
+    the device 300 ms").
+  * The time a buffer spends in Paula/AHI is now measured (buffer reply
+    times) instead of assumed, and the 0.81 trim of -60 ms is gone: checked
+    against the real sound output recorded from FS-UAE (sound within ~0-30
+    ms of the picture; with 300 ms of extra output delay simulated, 0.83 had
+    the sound ~400 ms late, 0.84 with Amiberry detected ~+25 ms).
+  * New: Sound sync. Menu button: "Sound sync (now +N ms) ..." with Delay
+    picture +50 / Picture sooner -50 / Reset; MUI menu: "Sound late: delay
+    picture +50 ms", "Sound early: picture -50 ms", "Sound sync reset /
+    show...". The status bar shows the result, it is saved in
+    ENVARC:AmiSurf.prefs (AVSYNC=). AVSYNC=<ms> keeps its meaning (+ =
+    picture later) and is added on top of the detected delay: if you set
+    AVSYNC=300 for Amiberry before, remove it (it would count twice).
+0.83 (17.10.2026)
+  * New: pair with the AmiStudio Host any time. MUI menu Project: "Pair with
+    Host..." (asks for the 6-digit code from amistudio-hostd pair, replaces
+    the token in ENV:/ENVARC:AmiStudio/HostToken, reconnects) and "Forget
+    Host token..." (deletes it). The menu button has "AmiStudio Host (pair)
+    ...", also in AmiSurf-gadtools: it shows which Host, connected or not,
+    where the token is, and offers Pair / Pair again / Forget token.
+  * AmiKit edition (AmiSurf-0.83-AmiKit.lha): Host/ now brings the AmiStudio
+    Host 0.1.3 (the official release folder, unchanged, in Host/amistudio-host/),
+    which includes the engine and the portable Chromium (only one copy),
+    so the AmiKit edition uses Host mode like the plain one. Through
+    AmiKit's Rabbit Hole AmiSurf starts Host/run-host.sh, which runs the
+    Host on 127.0.0.1:9220 (no pairing for the emulator); the Host starts
+    the engine. Engine and Host stop after 30 minutes without AmiSurf
+    (the Host's own --exit-idle).
+    History, bookmarks, passwords and the Chromium profile in Host/data are
+    kept. sh Host/run-host.sh --lan serves real Amigas too (--pair prints
+    the code). HOSTMODE=LEGACY still works (run-host.sh --legacy: plain
+    asb-chromed on 9223). If a Host already answers on 127.0.0.1:9220 (an
+    installed one, or one the AmiStudio launcher started), AmiSurf uses it
+    and neither it nor run-host.sh starts a second one.
+  * Pairing sends a stable id for this Amiga (ENVARC:AmiStudio/ClientId,
+    made once), so a Host 0.1.1+ replaces the Amiga's old token when it
+    pairs again instead of keeping both.
+  * AmiKit edition: Host/move-to-host.sh copies history, bookmarks,
+    settings, passwords and the Chromium profile to the standalone
+    AmiStudio Host 0.1.2+ (~/.local/share/amistudio-host/browser), and
+    the pairing tokens to ~/.config/amistudio-host/tokens, only into empty
+    folders / when no tokens file exists, never overwriting. The autostart command now passes
+    --background (needed by Host 0.1.2's run-host.sh; see HOSTCMD in
+    Host/README-AMIKIT.txt).
+  * The AmiKit edition no longer switches to HOSTMODE=LEGACY by itself.
+0.82 (17.10.2026)
+  * AmiStudio Browser is now AmiSurf, an app of the AmiStudio suite.
+    Programs AmiSurf, AmiSurf-020, AmiSurf-gadtools; drawer and archive
+    AmiSurf (AmiSurf-0.82.lha); log PROGDIR:AmiSurf.log; prefs
+    ENVARC:AmiSurf.prefs and AmiSurf.window. The old AmiStudioBrowser.prefs
+    and .window are read until Settings are saved again; the engine keeps
+    using ~/.config/amistudio-browser when ~/.config/amisurf does not exist.
+  * New: AmiSurf talks to the AmiStudio Host (TCP 9220, service "browser"),
+    which starts and supervises the browser engine on the PC. It finds the
+    Host via HOST=, ENV:AmiStudio/Host, 127.0.0.1:9220, then a LAN search.
+    An Amiga on the network pairs once ("Pair with Host": the code from
+    amistudio-hostd pair; token in ENVARC:AmiStudio/HostToken, shared with
+    the AmiStudio launcher). Clear requesters for not paired, no browser
+    service, version too old/new, busy, refused, and no Host found.
+  * HOSTMODE=LEGACY keeps the 0.81 way (plain asb-chromed on 9223,
+    AUTOHOST). The AmiKit edition (Host/run-host.sh in the drawer) switches
+    to it by itself.
+  * The separate Linux engine package (asb-chromed-<ver>-linux-x86_64) is
+    retired: install the AmiStudio Host instead (see ReadMe).
+  * Includes the 0.81 fixes below (0.81 was not released on its own).
+0.81 (not released separately; in 0.82)
+  * Fix: the Home button opened the DuckDuckGo search page. It now opens the
+    home page set in the host settings (menu: Host settings). A home page
+    typed into the Amiga Settings window still wins; leave that field empty
+    to use the host's. A saved HOME= that is just the old default counts as
+    empty.
+  * Host settings page: Save now says "Saved" (or why it could not save) and
+    the address no longer keeps the one-time ?save=... link.
+  * Fix: the splash screen was black with the MUI version on 16/24/32-bit RTG
+    Workbench screens (it was drawn before RTG had been detected), and the
+    main window then covered it. It now shows the picture, stays in front
+    until it closes, and its status text uses a light pen.
+  * Fix: changing the host or port in Settings could freeze the window: the
+    connect and the ASBC handshake had no time limit, so a host that did not
+    answer, or a port where something other than the engine listens, hung
+    the browser for good. Now connect is limited to 3 s and the handshake to
+    4 s. After a change in Settings the browser reconnects from its main
+    loop. While offline it retries without blocking the window, waiting 2,
+    4, 8, 16, then 30 s between tries, and the status bar says why it
+    failed (no answer, cannot connect, wrong port, token rejected).
+  * A/V sync: the engine now measures how long a picture takes from Chrome to
+    the Amiga screen and sends that number with its once-a-second stats. The
+    client sizes its sound buffer to match: it drops or repeats one sample
+    in 50-100 for small differences and jumps for large ones. 0.80 kept sound
+    250-500 ms in the buffer whatever the picture did, and Paula's rounded
+    rate slowly drained that buffer until a gap. The stats bar shows
+    "av <video>/<audio> ms", and the log gets an "av:" line every 30 s
+    while sound plays. This needs the 0.81 engine; with an older engine the
+    client buffers as before.
+    On a fast link the picture used to arrive long before the sound could
+    get out of its buffers (sound ~200-300 ms late). While sound plays, the
+    client now asks the engine to hold the picture back by the difference
+    (only then: typing and scrolling on silent pages stay immediate).
+    Measured in the emulator: sound within about +-100 ms of the picture
+    (0.80: 200-400 ms late). AVSYNC=OFF turns the hold-back off; AVSYNC=<ms>
+    shifts it (+ = picture later, - = picture earlier).
+  * Host settings: a home page typed without https:// (example.org) is saved
+    as https://example.org.
+  * The About requester pauses the sound stream while it is open (nothing
+    reads the connection meanwhile).
+  * Log: breadcrumbs for the About requester, the Settings window, splash,
+    connects (with how long a failed one took).
+0.80 (17.10.2026)
+  * New: DRM video (Netflix, Spotify, Prime Video, Disney+ ...) can work in
+    the AmiKit edition once Google's Widevine CDM is added. The CDM is
+    Google's and may not be redistributed, so it is not included: run
+    Host/get-widevine.sh once on Linux. It copies the CDM from Google Chrome
+    if installed, or (after asking) downloads Google's Chrome package from
+    dl.google.com and takes only its WidevineCdm folder (Host/data/
+    WidevineCdm). install-amikit.sh offers this too (--widevine,
+    --no-widevine). With Google Chrome installed the engine finds Chrome's
+    CDM by itself. Without a CDM, Netflix shows error M7701-1003.
+  * The engine (asb-chromed) points Chromium at that CDM at every start and
+    says in host.log which one it uses, or how to add one.
+  * Linux browsers only get Widevine L3, so the services limit quality
+    (Netflix up to 1080p, often 720p; Disney+ 480p-720p; Prime Video SD).
+    Tested with a public Widevine test stream (picture and sound reach the
+    Amiga); Netflix itself not tested yet.
+0.79 (17.10.2026)
+  * Fix: the main menu (the "hamburger" button at the right of the toolbar)
+    flickered and could crash the machine (seen on Kickstart 3.2, MUI 5,
+    24-bit RTG Workbench). With MUI 5 it is now MUI's own popup menu, drawn
+    the same way as MUI 5 draws the menu strip, and the page is not redrawn
+    while it is open. Choose an entry with the mouse or the keyboard; Esc or
+    a click outside closes it. Shortcuts are shown on the right.
+  * The menu opens once MUI has finished with the button click (it used to
+    open while MUI was still switching the active object).
+  * Older MUI and the GadTools version keep the menu in its own window; there,
+    too, the page is no longer drawn while the menu is open (repainted once
+    when it closes).
+  * Log: more breadcrumbs around menus (where the menu window opened, when it
+    is covered or loses the focus, when MUI's popup menu closes).
+0.78 (17.10.2026)
+  * Fix: signing in to a personal @gmail.com account failed with "Couldn't
+    sign you in - This browser or app may not be secure" (Google Workspace
+    accounts worked). The engine runs Chromium headless (AmiKit edition),
+    and headless Chromium announces itself as "HeadlessChrome" in its user
+    agent. It now sends the user agent of a normal Chrome of the same
+    version (HTTP header, navigator.userAgent, workers). Also removed: the
+    navigator.webdriver JavaScript override (the browser flag already makes
+    it a plain false; the override itself was detectable), Runtime.enable,
+    and every script and binding the engine used to put into pages.
+  * Fix: the "save the password" bar's Save / Never for this site / Not now
+    buttons could not be clicked on some pages. They relied on the page
+    passing the click on; a page that covers itself with an overlay or stops
+    clicks swallowed them. The engine now checks the click position against
+    the bar's buttons itself before it forwards the click.
+  * Passwords: a login is offered for saving when you click a form's button
+    or press Return in it (checked by the engine at that moment, no page
+    script). The bar is shown again on following pages for 2 minutes only.
+    "Never for this site" now also works on a site with a saved login.
+0.77 (17.10.2026)
+  * Fix: Backspace in the address bar deleted the whole address. A click into
+    the address used to "select all" invisibly, so the next Backspace or Del
+    wiped it. Now a click just places the cursor and Backspace, Ctrl-H, Del
+    and the cursor keys edit one character (MUI and GadTools). A-L still
+    selects the address so that typing replaces it; only after Ctrl-A do
+    Backspace/Del clear it. Ctrl-H works as Backspace (MUI 5 passes no
+    input event to edit hooks; Ctrl keys are now recognised there too).
+  * Menus no longer strobe: the main menu (menu button) and the right-click menu are
+    now real borderless windows on the screen, so page frames can never
+    paint over them. They may extend past a small browser window (the whole
+    28-item menu fits even on a 640x256 screen); cursor keys, Return and
+    Esc work in them, clicking elsewhere closes them. If the window cannot
+    be opened the menu is drawn in the page as before.
+  * While an Intuition/MagicMenu menu strip is open on our window, page
+    frames are held back and the page repainted once when it closes.
+  * Hangs/crash hardening: on a slow Amiga a playing video kept the frame
+    loop busy for many seconds so a menu click looked like a hang; the loop
+    now yields to the mouse and keyboard every 100 ms. Page blits are
+    clamped (no negative or out-of-page rectangles), menus are fitted to
+    the window/screen at any size or position, MUI's "more input queued"
+    case no longer sleeps, and the loop polls while a menu window is open.
+  * New Amiga-side log PROGDIR:AmiStudioBrowser.log (LOG=<file>, LOG=OFF):
+    startup info, connection, menus, errors, main-loop stalls and crash
+    breadcrumbs, written line by line; the previous run is kept as .old.
+  * AmiKit edition: the engine's data (history, bookmarks, settings,
+    passwords, Chromium profile, host.log) now lives inside the drawer in
+    AmiStudioBrowser/Host/data/ and is moved there from
+    ~/.local/state/amistudio-browser-amikit/ on first start (a note is left
+    in the old folder). Falls back to the old folder, with the reason in
+    host.log, if the drawer is read-only, noexec or cannot hold symlinks.
+    ASB_STATE= overrides. Downloads still go to ~/Downloads.
+  * Credits brought up to date: the stale note about the removed classic
+    engine is gone; OpenSSL, zlib and Zstandard (statically linked into the
+    Linux engine) are credited with their licence texts; Lucide, stb_image
+    and QOI are named in About.
+0.76 (16.10.2026)
+  * No more flicker over menus and the address list. Page frames used to be
+    drawn over an open menu (main menu, right-click menu, address
+    suggestions) and the menu drawn again on top, so on a playing video the
+    menu flashed. Frames now skip the menu's rectangle.
+  * Typing in the address bar no longer flashes the suggestion list (it was
+    erased and repainted on every key) and no longer repaints the whole page
+    when a list closes: only the uncovered strip is repainted.
+  * Menus are drawn without first filling the whole box, so hovering does
+    not flash.
+0.75 (16.10.2026)
+  * Fix: Esc quit the MUI browser in a Workbench window (MUI turns Esc into
+    a close request, which was treated like the close gadget). Esc now goes
+    to the page: it leaves video fullscreen and closes page dialogs (and
+    stops a page that is still loading). Only the close gadget quits.
+  * Fix: maximising a video (YouTube/HTML5 fullscreen button) showed it
+    smaller instead of filling the view. Chrome dropped the host's viewport
+    size in fullscreen and sent frames at the Linux screen's size; the host
+    now emulates a screen the size of the Amiga view, puts the viewport
+    back when fullscreen starts or ends and holds back wrong-size frames.
+    Use F10 as well to fill the whole Amiga screen.
+  * Frame guards: frames larger than 4096 pixels or with a bad pixel format
+    are dropped, and the page area is cleared when the page gets smaller.
+0.74 (16.10.2026)
+  * Sound. The host runs the browser on a private PulseAudio/PipeWire null
+    sink, captures it (parec, or ffmpeg) at 22050 Hz stereo and streams it
+    in 40 ms ASBC AUDIO packets with a host timestamp; silence costs 10
+    bytes a packet. The Amiga plays it through AHI (16-bit on the 040
+    build, 8-bit on 020) or Paula via audio.device, double-buffered, with a
+    ~250 ms jitter buffer that re-primes after an underrun and drops old
+    audio past 500 ms so sound stays near the picture. Audio is serviced
+    between network messages, so it keeps playing when frames are dropped.
+  * Formats: 8-bit signed stereo (default), 16-bit (AHI on 040), IMA ADPCM
+    (SOUND=ADPCM). The client lists what it can play in HELLO; old hosts
+    and old clients just have no sound.
+  * SOUND=ON|OFF|ADPCM tooltype, Amiga-M / menu mute (the host stops
+    streaming while muted), audio stats in the STATS status bar.
+  * Packages: AmiStudioBrowser-0.74-AmiKit.lha holds the Amiga drawer with
+    the Linux engine in AmiStudioBrowser/Host, so one unpack on a drive
+    Linux can see is a full AmiKit setup. The small Amiga-only LHA and the
+    host tarball are still there.
+0.73 (16.10.2026)
+  * Clipboard keys in the address and find fields: Ctrl-C copies, Ctrl-X
+    cuts, Ctrl-V pastes and Ctrl-A selects all, using the Amiga clipboard
+    (clipboard.device unit 0, IFF FTXT). Before, Ctrl-C/Ctrl-X typed a box
+    character. Right Amiga-C/X/V/A do the same in the GadTools build; MUI
+    keeps its own Amiga-C/X/V. Control characters are never typed into a
+    field, and pasted newlines/tabs become spaces.
+  * On the page, Ctrl-C copies and Ctrl-X cuts the page's selection
+    (including the selection inside a focused text box) to the Amiga
+    clipboard, and Ctrl-A selects all. Needs the 0.73 host for cut and
+    select all; an older host copies instead.
+0.71 (16.10.2026)
+  * Firefox backend: asb-chromed -browser firefox drives Firefox over
+    WebDriver BiDi (Firefox's own protocol; no CDP). Chrome stays the
+    default. Choose per client with the BROWSER=FIREFOX|CHROME tooltype or
+    Settings > Browser; the client asks for it when it connects and the
+    host restarts the other browser. See "Backends" in README for what
+    each one can and cannot do.
+  * Screen fix: the client's own screen now has exactly the mode's size.
+    Before, a Workbench larger than the RTG mode gave a scrolling screen
+    whose page was wider than what was shown (Google cut off on the right).
+  * SCREENMODE=1280x800 (tooltype, prefs or argument) picks that RTG mode,
+    or the closest one there is.
+0.70 (16.10.2026)
+  * MUI is now the main interface (AmiStudio suite build standard): MUI tab
+    strip, icon toolbar, address field with padlock, find bar with match
+    count, status bar, MUI menus (Project / Navigate / View) with Amiga-key
+    shortcuts, MUI Settings window, "About AmiStudio Browser 0.70". The page,
+    popup menu, right-click menu and address suggestions are shared with the
+    GadTools client, which ships as AmiStudioBrowser-gadtools.
+  * Three binaries: AmiStudioBrowser (68040/060 + FPU), AmiStudioBrowser-020
+    (68020/030 + 68881/68882) and AmiStudioBrowser-gadtools. No soft-float
+    build any more. Without an FPU a requester explains it and the program
+    quits.
+  * Release archive AmiStudioBrowser-0.70.lha (jlha, LHA level 1).
+  * Fix: the popup menu dropped its last entry (Quit).
+0.69 (16.10.2026)
+  * Pre-converted frames: the client tells the host its screen format
+    (Picasso96 RGB565/555 in either byte order, 24/32-bit, or AGA 8-bit with
+    its palette). The host converts the changed areas, dithers onto the
+    palette for AGA, and sends them raw or RLE-packed. The client copies them
+    with p96WritePixelArray, WritePixelArray or WriteChunkyPixels, with no
+    decoding. FRAMES=QOI keeps the old path.
+  * Speed stats in the status bar: fps, KB/s, client ms per frame and host
+    encode ms. Turn them on with the STATS tooltype or the menu.
+  * Sends less: the client acknowledges each update and the host keeps at
+    most 2 in flight, dropping frames in between. When the page scrolls, the
+    host sends a scroll command; the client moves what it already shows and
+    only the new strip is sent. Pages that don't change send nothing.
+  * Benchmarks: bench/ (5 pages, 68040 RTG, 68020 AGA, Linux stream).
+0.68 (16.10.2026)
+  * Zoom (A-+/A--/A-0, menu, Ctrl+wheel on Linux) with the zoom % shown in the
+    status bar. Bigger UI: UIFONT=, TOOLBAR=LARGE / BIGUI, SCREENMODE=AUTO.
+  * Popup menu, right-click menu (open link in new tab, copy link, save
+    image, back, reload), keyboard shortcuts that are the same on Amiga and
+    Linux.
+  * Address-bar suggestions from history and bookmarks; searches use the
+    engine set in asb://settings.
+  * Find with a match count and next/previous.
+  * asb://downloads, asb://bookmarks (edit, delete, search), asb://history,
+    asb://settings and asb://passwords pages (Host check + CSRF key).
+  * Password saving: AES-256-GCM store on the host, offered after a login,
+    filled in on the next visit.
+  * Save page as PNG/PDF/HTML, print through printer.device, view source.
+  * Tab drag to reorder, reopen closed tab, padlock for https, full screen
+    (F10 Amiga / F11 Linux), Amiga settings window (ENV:/ENVARC: prefs).
+  * Remote hosts: 5 failed handshakes in 60 s ban the IP for 5 minutes. A
+    client replaced by another one no longer reconnects by itself.
+  * Fixes: missing frames after a new client or a cross-process navigation;
+    About closed at once when opened from the menu; offline reconnect under
+    UAE.
+  * Tests: make test-host, emu/test68.sh, emu/asbaga.fs-uae.in (AGA).
+0.67 (16.10.2026)
+  * Single 68020 client (no FPU needed, runs on any 020+); 040 build removed.
+  * AmiStudio Paint-style UI: THEME=PRO dark theme, SCREENFONT=TOPAZ, flat
+    24x24 icons loaded from PROGDIR:Icons/, status bar, RTG screen-mode picker
+    (SCREENMODE, MODEREQ tooltypes, AGA fallback with dither), splash, About
+    (Help key), DualPNG icons, DEBUG tooltype.
+  * ASBC protocol v2 with optional shared token. asb-chromed -listen ADDR
+    needs -token (8+ chars) for non-loopback addresses. CHROMEHOST may be a
+    hostname; TOKEN tooltype/prefs.
+  * Fixes: back/reload/tab messages dropped; back/forward; iframes clobbering
+    the URL and loading state; new-tab selection; stray connections killing
+    the real client; stale X socket; \u escapes; SDL text rendering; warnings.
+  * SDL client: tab strip, Ctrl+F find, Ctrl+T, Ctrl+W.
+  * Toolbar icons based on Lucide (ISC licence).
+
+Unreleased (Chrome backend)
+  * The browser is now a thin client for Google Chrome running on a Linux
+    host: asb-chromed drives Chrome over the DevTools protocol and streams
+    changed screen regions (QOI, PNG fallback) to AmiStudioBrowser over the
+    ASBC protocol (port 9223). Input, navigation, tabs, find, clipboard,
+    bookmarks/history and downloads (AmiKit:Downloads) go the other way.
+  * The in-house engine (HTML/CSS/layout/paint, libcss, QuickJS-ng, MintVID
+    video, AmiSSL) was removed from the main line. It is kept at git tag
+    classic-final and branch classic.
+  * asb and asb-mui are no longer shipped. AmiSSL and MUI are not needed.
+0.66 (2026-10-15)
+  * Real CSS in the style engine (libcss) instead of 0.64 workarounds:
+    grid-template-columns/rows (px, %, fr, repeat(), auto-fill/auto-fit,
+    minmax(), fit-content()), grid-column/grid-row/grid-area with line
+    numbers, negative lines and span, auto placement; gap/row-gap/
+    column-gap; aspect-ratio; border-radius (all corners, px or %);
+    object-fit.
+  * calc() works in every length property (width, margins, paddings,
+    inset, gap, radius, flex-basis...), mixing px, em/rem, vw/vh and %.
+  * CSS Color 4 (rgb(1 2 3 / 50%), #rrggbbaa, hsl/hwb, fractional
+    values) and logical properties (margin-inline, padding-block, inset,
+    inset-inline-start ...; assumes left-to-right horizontal text).
+  * Removed hacks: Tailwind class-name sniffing (rounded-*, grid-cols-*),
+    order/orphans/widows/column-count used to smuggle values, and the
+    rgb() colour rewriter. Pages that relied on them now get the real
+    property values.
+  * The old built-in CSS engine (LIBCSS=0 builds) is deprecated: it does
+    not know the new properties and fails 4 unit tests.
+0.65 (2026-10-15)
+  * Google search: typing in the Google home page box (Enter or the
+    button), a /search?q= URL, or plain words in the address bar all
+    search Google. Google now only serves results after its JavaScript
+    "BotGuard" check sets an SG_SS cookie; the browser runs that check and
+    sends the cookie (document.cookie now uses the real cookie jar), but
+    Google may still refuse it. When Google answers with "enable
+    JavaScript", "Update your browser" or its CAPTCHA page, the same query
+    opens on Brave Search (plain HTML results, next page works) with a
+    yellow banner and a "Try Google again" link.
+  * Address bar: text that isn't a web address searches Google;
+    "amiga.org" or "localhost:8080" still go straight to the site.
+  * Loading feedback: busy pointer while a page loads, Reload turns into
+    Stop, an animated gauge and "Loading <host>... / Running scripts n/N"
+    in the status bar; Esc or Stop cancels.
+  * Link hover: the pointer becomes a hand over links (OS 3.2 link pointer,
+    built-in hand sprite on 3.0/3.1) and the link address shows in the
+    status bar.
+  * Fixes: a display:flex <textarea> (Google's search box) is a form
+    field again; curly quotes no longer break scripts and attributes on
+    the Amiga; pages that fade in with body{opacity:0} (Brave) show up.
+0.64 (2026-10-14)
+  * CSS Grid tracks (repeat(N) → equal columns), gap, object-fit
+    cover/contain, overflow:hidden clipping, border-radius, and
+    position:sticky. Tailwind rgb(r g b / a) colours now cascade.
+  * Linux asb-sdl chrome is Chrome-like: tab, back/forward/reload,
+    omnibox, scrollbar, find-in-page (Ctrl+F), hover URL, zoom,
+    Alt+Left/Right, Ctrl+R / F5. Pages paint full-bleed.
+  * YouTube on 68k: skip the ~11 MB Kevlar/Polymer hydrator and paint
+    search results from ytInitialData. Job nodes use the task-safe
+    allocator (UI + video process).
+  * GCC 16 / AmigaDev: _sfdc_vararg for Roadshow, css_fixed_or_calc
+    compound literals, int32_t for JS_ToInt32.
+0.63 (2026-10-14)
+  * New CSS engine: the cascade is now NetSurf's libcss (MIT). Complex
+    selectors, media queries, !important and inheritance follow the
+    standard, so GitHub, Hacker News, Wikipedia and Google home look much
+    closer to a desktop browser. Wikipedia no longer turns dark.
+  * Up to 32 style sheets per page (was 8).
+  * Link numbers [n] are no longer drawn next to links (clutter).
+  * Faster JavaScript on 68k: compiled scripts are cached in
+    PROGDIR:JSCache; a much cheaper script-timeout clock; a faster memory
+    allocator; JSON.parse about 20x faster. YouTube script time on a JIT
+    68040 fell from about 72 s to 21-25 s.
+  * Disk cache default raised to 48 MB, so YouTube's large style sheets
+    stay cached (that was most of the "18 s CSS" delay).
+  * Script time limits scale with the machine's speed; new JSPAGETIMEOUT
+    pref (default 300 s). A stopped script no longer counts as an error.
+  * Known: no CSS grid or border-radius yet; var() only for page-wide
+    variables; YouTube can run out of memory on 128 MB machines.
+0.62 (2026-10-14)
+  * No more lockups while YouTube loads: the window redraws between scripts,
+    the status bar shows "Running scripts n/N", and Stop or Esc cancels.
+    The old page is cleared before the new page's scripts run.
+  * YouTube search results lay out in two columns (thumbnail + details).
+  * The browser now identifies as a current Chrome, in request headers and
+    to scripts (navigator.userAgent/userAgentData). YouTube is the
+    exception (it serves WebP-only thumbnails to Chrome).
+    IDENTITY=AMISTUDIO switches back.
+  * Google sign-in form now appears (first step towards Gmail).
+  * Enter sends keydown/keypress/keyup to page scripts first.
+  * document.styleSheets; longer JavaScript error stacks.
+  * Runaway-script guard default is 60 s on Amiga (10 s on Linux): 10 s cut
+    YouTube's renderer off on 68k.
+  * Known: Google search returns a blank page (JS challenge / 429);
+    DuckDuckGo shows a bot check; YouTube on a real-speed 68020 without
+    JIT is not usable yet (TLS handshake fails, scripts far too slow).
+0.61 (2026-10-14)
+  * YouTube search results and watch pages now render: titles, channels,
+    thumbnails, descriptions, related videos. Clicking a video opens the
+    built-in player. (The logged-out home page only shows YouTube's own
+    "Try searching to get started".)
+  * DOM: real HTMLElement/HTML*Element interfaces with per-tag properties,
+    native custom elements (define/whenDefined/upgrade, connected/
+    disconnected/attributeChanged), MutationObserver with real records,
+    persistent <template>.content, document.all, IntersectionObserver,
+    plausible element sizes, anchor URL parts (pathname etc.), Audio().
+  * Icon-only buttons use their aria-label/title as the label.
+  * The runaway-script guard grows with script size (+1 s per 100 KB).
+  * The JavaScript memory limit follows free Fast RAM (largest block minus
+    12 MB, minimum 32 MB).
+  * New UA=<string> argument/ToolType (-ua on Linux) sets the User-Agent.
+    Default is now "Mozilla/5.0 (AmigaOS 3.x; m68k) AmiStudioBrowser/0.61".
+  * Known: Google search answers "Update your browser" / enable-JS and
+    DuckDuckGo a bot check, whatever the User-Agent. Pages are single
+    column (no side-by-side flex layout yet).
+0.6 (2026-10-14)
+  * JavaScript, using the QuickJS-ng engine. Inline and external scripts,
+    document.write, DOM (querySelector, createElement, innerHTML, classList,
+    dataset, style, events, onclick, forms), timers, Promises, fetch() and
+    XMLHttpRequest, localStorage, custom elements via the sites' own polyfills.
+  * Runaway-script guard: a script or handler that runs longer than
+    JSTIMEOUT seconds (default 10) is stopped and the page carries on.
+  * Scripts can be switched off: NOSCRIPT or SCRIPTS=NO (argument or ToolType),
+    saved as SCRIPTS= in ENVARC:AmiStudioBrowser.prefs. <noscript> content is
+    shown when scripts are off.
+  * Status line shows script count and time ("js 10/6 ext 5140ms").
+  * Known: YouTube and Gmail load and run their scripts but do not render yet
+    (see README). Next releases: 0.61, 0.62, ...
+0.5 (2026-10-14)
+  * Built-in video player based on MintVID (no GPL parts): direct media
+    links, YouTube links, <video> and YouTube <iframe> embeds (poster +
+    "Play video"). Three modes: Direct, Keyframes+audio (default on the
+    68020 build), Download+convert. Audio through Paula. Frames drawn in
+    full colour on RTG and dithered on AGA.
+  * About window: banner, version/build, attributions. Project > About menu,
+    About toolbar button, Help key, or about:.
+  * ATTRIBUTIONS file and LICENSES drawer with the full licence texts.
+  * Distributed as a plain drawer: copy it anywhere, no Install script.
+  * Next releases: 0.6 (JavaScript), then 0.61, 0.62, ...
+0.4 (2026-10-14)
+  * MUI browser window: Back/Fwd/Reload/Stop/Home toolbar, URL field,
+    status line + image progress gauge, persistent bookmarks and history
+    windows. NOMUI argument keeps the old Intuition window.
+  * All network traffic (bsdsocket + AmiSSL) and image decoding now run in a
+    separate worker process; the Stop button interrupts a fetch.
+  * Disk cache for stylesheets and images (PROGDIR:Cache or T:AmiStudioCache,
+    CACHESIZE=<MB>, default 8). Second visit to Wikipedia: CSS 820 -> 80 ms,
+    images 2.7 -> 0.4 s.
+  * SCREEN=AGA: own 256-colour screen with dithered images for AGA machines.
+  * Real position:fixed (stays put while the page scrolls).
+0.3 (2026-10-14)
+  * Main program is now the 68020 build without FPU: "AmiStudioBrowser".
+    The 68040+FPU build is optional: "AmiStudioBrowser040".
+  * Much faster layout: Wikipedia "Amiga" article laid out in 0.8 s instead of
+    4.6 s (emulated 68040). Faster style matching (hashed keys + ancestor
+    filter), exact per-element style cache, pre-split CSS declarations,
+    page-lifetime memory arena, first screen painted before the full layout.
+  * Off-screen images are only loaded and decoded when they come near the view.
+  * CSS text colours and backgrounds are painted, including inline highlights
+    and CSS custom properties (var(--x, fallback), :root).
+  * Bigger default text (18 px), zoom with + / - / 0, FONTSIZE= and ZOOM=
+    arguments and ToolTypes, saved in ENVARC:AmiStudioBrowser.prefs.
+    Outline fonts are preferred.
+  * Clear AmiSSL error messages (missing AmiSSL: assign, missing
+    amissl_v*.library, old amisslmaster) and fallback to older AmiSSL 5.x APIs.
+  * RTG: CyberGraphX-compatible screens supported as well as Picasso96;
+    no third-party RTG headers bundled any more.
+0.2
+  * First Amiga graphical version: RastPort painting, RTG + AGA images,
+    background image decoding process, URL bar, forms.

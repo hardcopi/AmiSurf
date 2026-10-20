@@ -1,0 +1,17 @@
+<!doctype html><html><head><title>drm</title>
+<script src="https://cdn.jsdelivr.net/npm/shaka-player@4.11.7/dist/shaka-player.compiled.js"></script>
+<style>body{margin:0;background:#fff}video{width:960px;height:540px;background:#000}</style></head><body>
+<video id=v autoplay playsinline></video><pre id=log></pre>
+<script>
+window.st={eme:'?',err:null};
+const L=s=>{document.getElementById('log').textContent+=s+'\n'};
+(async()=>{
+ try{ const a=await navigator.requestMediaKeySystemAccess('com.widevine.alpha',[{initDataTypes:['cenc'],videoCapabilities:[{contentType:'video/mp4; codecs="avc1.42E01E"',robustness:'SW_SECURE_CRYPTO'}],audioCapabilities:[{contentType:'audio/mp4; codecs="mp4a.40.2"'}]}]); st.eme='ok '+a.keySystem; }catch(e){ st.eme='fail '+e.name+': '+e.message; }
+ L('EME '+st.eme);
+ const src=new URLSearchParams(location.search).get('clear')?'https://storage.googleapis.com/shaka-demo-assets/angel-one/dash.mpd':'https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine/dash.mpd';
+ shaka.polyfill.installAll(); const p=new shaka.Player(); await p.attach(document.getElementById('v'));
+ p.configure({drm:{servers:{'com.widevine.alpha':'https://cwip-shaka-proxy.appspot.com/no_auth'}}});
+ p.addEventListener('error',e=>{st.err=e.detail.code;L('ERR '+e.detail.code)});
+ try{ await p.load(src); st.ks=p.keySystem(); st.lic=p.getStats().licenseTime; L('loaded '+src+' ks='+st.ks);}catch(e){ st.err=e.code; L('load ERR '+e.code+' '+JSON.stringify(e.data).slice(0,200)); }
+})();
+</script></body></html>

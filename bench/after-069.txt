@@ -1,0 +1,32 @@
+AFTER 0.69 (code of 588989d, same scripts/pages as baseline-068.txt) 2026-10-16 10:38 EDT
+== 68k FS-UAE 68040 JIT, RTG 1920x1080 (bench68k.sh, WAIT=25s, 25 Down presses) ==
+page            ready s   load KB  scr fps  scr KB/s  scr ms/fr  ld frm  ld ms/fr
+Google search       2.3       132     0.00       0.0        0.0       3       6.9
+YouTube home        2.3       551     0.00       0.0        0.0       7      16.5
+BBC News            5.4      4735    24.52    8279.0       11.8     127       2.2
+GitHub repo         2.4      1204    27.31    3215.7       10.7      27       8.6
+Hacker News         1.7       269     7.06     845.2        9.8       1      26.1
+NOTE: Google answered with a reCAPTCHA page ('unusual traffic') in the after runs, so the Google rows are not comparable.
+
+== 68k FS-UAE 68020 real speed, AGA 640x512: client restarted per page (bench020.sh, WAIT=90s, SETTLE=30s) ==
+page            ready s   load KB  scr fps  scr KB/s  scr ms/fr  ld frm  ld ms/fr
+Google search      12.4       547     0.00       0.0        0.0       4     823.1
+YouTube home       10.2       545     0.00       0.0        0.0       3    1038.7
+BBC News           63.5      1148     0.42      47.9      726.2      31     211.4
+GitHub repo        16.0       803     0.36      42.8      905.4       3    2040.2
+Hacker News         8.7       260     0.36      56.1     1012.4       1    1688.7
+
+== Linux: host -> probe client 1400x770, old QOI path (same as baseline) ==
+page            ready s   load KB  scr fps  scr KB/s
+Google search       2.1        97     0.00       0.0
+YouTube home        1.8       221     0.00       0.0
+BBC News            3.2      3876    15.85    8753.4
+GitHub repo         1.9      1076    16.38    3195.2
+Hacker News         1.4       192     7.86    1457.0
+== Linux: probe announcing RGB565 + RLE + ACK + SCROLL (PROBE_FMT=2; scroll messages count as updates) ==
+page            ready s   load KB  scr fps  scr KB/s
+Google search       2.0       823    32.63    1972.5
+YouTube home        2.3       189     0.00       0.0
+BBC News            3.5      2606    33.30    7182.5
+GitHub repo         1.9       923    32.49    2956.6
+Hacker News         0.7       194    14.78    1253.5

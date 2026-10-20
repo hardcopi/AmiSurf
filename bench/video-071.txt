@@ -1,0 +1,18 @@
+BIG BUCK BUNNY (official Blender upload, youtube.com/watch?v=aqz-KE-bpKQ, "60fps 4K") on 0.71, 2026-10-16
+bench/video.sh: 45 s of playback (start, any ads), then 30 s measured. YouTube picks the quality for the
+viewport size; it could not be forced to 1080p. Client stats lines (fps, KB/s, client ms per frame);
+"acks" = frames acknowledged by the client per second, counted in the host log (cross-check).
+
+platform / backend              fps      KB/s   client ms/fr   acks fps   note
+Linux probe 1400x770, Chrome   27.10   24974.8        -            -
+Linux probe 1400x770, Firefox   6.80    2582.0        -            -     best 20 s window before playback failed (see below); 0.00 in the measured window
+040 RTG 1920x1080, Chrome      14.24   22770.9      26.3         14.20
+040 RTG 1920x1080, Firefox      0.37     613.0      21.6          0.37   FAILED twice: YouTube shows "Something went wrong"
+020+FPU AGA 640x512, Chrome       -         -          -          1.30   video plays; the busy 020 client never reached its stats line, so only acks
+020+FPU AGA 640x512, Firefox    0.82     116.1     781.5          0.20   FAILED twice: same YouTube error
+
+Firefox (WebDriver BiDi): YouTube starts the video and then stops it with "Something went wrong. Refresh or try
+again later." within ~45 s on every run (4 tries; one host fix in between: no navigator.webdriver override).
+Plain Firefox 158 without a BiDi session plays the same video on the same host, so YouTube is most likely
+reacting to the automation session. Recorded as a Firefox-backend gap (README "Backends").
+Screenshots: shots/f71-bunny-chrome-040.png (status bar: 15 fps 19598 KB/s 19.2 ms), shots/f71-bunny-firefox-040.png.

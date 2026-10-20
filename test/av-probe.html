@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- A/V sync probe (0.84): a white box (covering page pixel 300,250) shows for 250 ms every 2 s and a
+     100 ms 1 kHz beep starts at the same moment of the page's audio clock. Record the Amiga screen together with the
+     emulator's sound and run tools/avsync-measure.py (or use the ASB_AVPROBE client build).
+     -->
+<html><head><title>AmiSurf A/V probe</title>
+<style>html,body{margin:0;background:#000;color:#888;font:20px sans-serif;overflow:hidden}
+#b{position:absolute;left:200px;top:150px;width:300px;height:300px;background:#000}</style></head>
+<body><div style="position:absolute;left:600px;top:20px">A/V probe: box + beep each second <span id=st></span></div><div id=b></div>
+<script>
+const ctx=new AudioContext(), box=document.getElementById('b'), st=document.getElementById('st');
+/* The engine's Chrome sends a screencast frame only when the page changes, and a lone change once a second often
+   arrives a frame late: a 20 ms heartbeat (the counter) keeps frames flowing (~5-10/s), and each tick shows the box
+   while the audio clock is in the first 250 ms of an even second. Beeps (100 ms, 1 kHz) are scheduled up front on
+   the same seconds (2 s period: offsets up to +-1 s are unambiguous). The engine captures the page's sound before any device: no output latency involved.
+   Resolution is one engine frame (~100-200 ms): use the median of many beeps. */
+let n=0;
+ctx.resume().then(()=>{
+  const t0=Math.ceil(ctx.currentTime+0.5);
+  for(let k=0;k<900;k+=2){ const o=ctx.createOscillator(), g=ctx.createGain(); o.frequency.value=1000; g.gain.value=0.5;
+    o.connect(g).connect(ctx.destination); o.start(t0+k); o.stop(t0+k+0.1); }
+  setInterval(()=>{ const t=ctx.currentTime-(ctx.baseLatency||0), on=t>=t0 && (t-t0)%2<0.25;
+    box.style.background=on?"#fff":"#000"; st.textContent=ctx.state+' '+t.toFixed(1)+' '+(++n%100); },20);
+});
+</script></body></html>

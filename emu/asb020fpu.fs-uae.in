@@ -1,0 +1,46 @@
+# 68020 + 68882 FPU, AGA, real speed: for AmiSurf-020 (asb020 = same machine without FPU, for the FPU-check requester)
+[fs-uae]
+amiga_model = A1200
+chipset = aga
+chip_memory = 2048
+kickstart_file = @KICKSTART@
+sound_output = interrupts
+audio_driver = dummy
+fullscreen = 1
+fullscreen_mode = window
+window_width = 1920
+window_height = 1080
+zoom = full
+keep_aspect = 0
+fullscreen_width = 1920
+fullscreen_height = 1080
+floppy_drive_speed = 0
+floppy_drive_0 =
+floppy_image_0 = @DISKS@/Install3.1.adf
+floppy_image_1 = @DISKS@/Extras3.1.adf
+floppy_image_2 = @DISKS@/Storage3.1.adf
+floppy_image_3 = @DISKS@/Locale3.1.adf
+floppy_image_4 = @DISKS@/Fonts3.1.adf
+hard_drive_0 = @HD@
+hard_drive_0_label = System
+cpu = 68020
+fpu = 68882
+zorro_iii_memory = 65536
+jit_compiler = 0
+uae_cachesize = 16384
+uae_cpu_compatible = false
+uae_cpu_speed = real
+uae_compfpu = false
+uae_fpu_strict = true
+# --- mouse input for box desktop (VNC/synthetic X events) ---
+joystick_port_0 = mouse
+joystick_port_0_mode = mouse
+joystick_port_1 = none
+initial_input_grab = 0
+automatic_input_grab = 0
+mouse_integration = 1
+# --- RTG: UAEGFX Zorro III, 32 MB ---
+graphics_card = none
+graphics_memory = 65536
+# --- AmiSurf: host-socket emulation (UAE bsdsocket.library) ---
+bsdsocket_library = 1

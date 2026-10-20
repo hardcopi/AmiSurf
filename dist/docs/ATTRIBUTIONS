@@ -1,0 +1,36 @@
+AmiSurf - third-party components and licences
+=======================================================
+AmiSurf itself is (c) 2026 Rich. Licence texts are in the LICENSES
+drawer next to this file (and in Host/LICENSES/ in the AmiKit edition).
+
+Pages are rendered by Chrome, Chromium or Firefox on a Linux PC (asb-chromed);
+the Amiga program is a thin client.
+
+Amiga program (AmiSurf, -020, -gadtools)
+* stb_image (Sean Barrett) - PNG/JPEG decoding of frames.
+    Public domain / MIT (dual).  LICENSES/stb_image.txt
+* QOI - The Quite OK Image format (Dominic Szablewski) - frame tiles.
+    MIT.  LICENSES/qoi-MIT.txt
+* Built against the MUI developer headers; MUI itself is installed by the user
+  and not included.
+* Ken's Icons - Kenneth's DualPNG Workbench icons (the AmiSurf drawer
+  icon), also shipped in AmiKit. Copied byte-for-byte, never re-saved.
+* Toolbar icon shapes: Lucide - ISC licence, Copyright (c) Lucide Contributors.
+  https://lucide.dev
+* ReadMe/CHANGES/ATTRIBUTIONS/LICENSES icons: the AmiStudio suite's shared
+  classic OS3 ReadMe icon (as in AmiStudio Paint).
+
+Linux engine (asb-chromed; host tarball and the AmiKit edition's Host/)
+* stb_image and QOI, as above.
+* OpenSSL 3 libcrypto (statically linked) - Apache License 2.0.
+    LICENSES/OpenSSL-Apache-2.0.txt
+* zlib (Jean-loup Gailly, Mark Adler) and Zstandard (Meta), statically linked
+  as part of libcrypto - zlib licence / BSD-3-Clause.
+    LICENSES/zlib.txt, LICENSES/zstd-BSD-3-Clause.txt
+
+AmiKit edition only (Host/amistudio-host/engine/chromium; LICENSES there)
+* Chromium - BSD licence, with its third-party components.
+    Host/LICENSES/Chromium-LICENSE.txt, Host/LICENSES/chromium-credits.html
+* ungoogled-chromium and its portable Linux build - BSD-3-Clause.
+    Host/LICENSES/ungoogled-chromium-LICENSE.txt, portablelinux-LICENSE.txt
+    https://github.com/ungoogled-software/ungoogled-chromium-portablelinux

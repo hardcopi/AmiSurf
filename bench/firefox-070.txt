@@ -1,0 +1,62 @@
+FIREFOX vs CHROME on 0.71 (tree 3ca46c3 + bench instrumentation; Chrome path unchanged from 0.70) 2026-10-16 15:43 EDT
+Same 5 pages and scripts as baseline-068.txt / after-069.txt. Host: asb-chromed -browser chrome|firefox, browser on Xvfb :95.
+Chrome 154 (CDP screencast) vs Firefox 158.0 (WebDriver BiDi, polled browsingContext.captureScreenshot).
+
+== Linux: host -> probe client 1400x770, QOI path ==
+-- chrome
+page            ready s   load KB  scr fps  scr KB/s
+Google search       2.2       877    16.91    2476.0
+YouTube home        2.1       256     0.00       0.0
+BBC News            3.8      4049    14.36    7972.7
+GitHub repo         3.9      3150    16.37    3190.3
+Hacker News         0.7       199     7.06    1382.5
+-- firefox
+page            ready s   load KB  scr fps  scr KB/s
+Google search       1.3       113     0.00       0.0
+YouTube home        2.1       222     0.00       0.0
+BBC News            5.4      2914     7.31    4398.0
+GitHub repo         1.4       545     9.32    1636.9
+Hacker News         0.7       670     3.33     560.2
+
+== 68k FS-UAE 68040 JIT, RTG 1920x1080, MUI AmiStudioBrowser (bench68k.sh, WAIT=25s, 25 Down presses) ==
+-- chrome
+page            ready s   load KB  scr fps  scr KB/s  scr ms/fr  ld frm  ld ms/fr
+Google search       3.0      1053    25.85    2381.7       11.6      16       8.9
+YouTube home        2.2       498     0.00       0.0        0.0       8      17.6
+BBC News            4.7      4544    22.32    7697.1       14.1     117       2.6
+GitHub repo         2.8       985    24.05    2949.5       13.1      20      10.2
+Hacker News         0.8       281     5.93     707.8       10.7       1      16.8
+-- firefox
+page            ready s   load KB  scr fps  scr KB/s  scr ms/fr  ld frm  ld ms/fr
+Google search       1.5       137     0.00       0.0        0.0       4       5.4
+YouTube home        2.4       381     0.00       0.0        0.0       8      11.5
+BBC News            5.1      4231     9.96    3672.5       11.0      31       6.5
+GitHub repo         2.0       779    10.63    1154.7        8.7       7      11.6
+Hacker News         0.8       844     2.95      65.8        2.6       3      23.5
+
+== 68k FS-UAE 68020+68882 real speed, AGA 640x512, MUI AmiStudioBrowser-020: client restarted per page (bench020.sh, WAIT=90s, SETTLE=30s) ==
+   (0.70 dropped the soft-float build, so this uses asb020fpu instead of the FPU-less asb020 of the older files)
+-- chrome
+page            ready s   load KB  scr fps  scr KB/s  scr ms/fr  ld frm  ld ms/fr
+Google search       5.3       605     0.40      48.2      789.6       4     863.3
+YouTube home        4.9       550     0.00       0.0        0.0       3    1053.8
+BBC News           44.2      1773     0.42      40.9      687.3      35     300.7
+GitHub repo         8.8       804     0.26      42.6     1298.7       3    2330.7
+Hacker News         3.3       268     0.36      49.6      922.1       1    1676.9
+-- firefox
+page            ready s   load KB  scr fps  scr KB/s  scr ms/fr  ld frm  ld ms/fr
+Google search       5.4       640     0.00       0.0        0.0       3    1226.7
+YouTube home        5.4       671     0.00       0.0        0.0       3    1286.7
+BBC News           66.4      1794     0.39      50.3      822.4      61     170.7
+GitHub repo         7.8       810     0.26      36.0      985.4       3    2076.1
+Hacker News         4.8       546     0.29      43.3      976.5       3    1096.3
+
+== Summary (scroll fps, BBC News / GitHub) ==
+            Linux          040 RTG        020 AGA
+Chrome      14.4 / 16.4    22.3 / 24.1    0.42 / 0.26
+Firefox      7.3 /  9.3    10.0 / 10.6    0.39 / 0.26
+Firefox has no screencast: frames are polled screenshots, about half Chrome's rate on Linux and the 040. On the
+020 the client is the bottleneck and both are the same.
+Zero-fps rows: Google on Firefox = Google answered with a reCAPTCHA page (nothing to scroll; Chrome got the real
+results). YouTube home on both = a fresh profile gets the empty "Try searching to get started" feed that fits the
+screen, so Down scrolls nothing (also 0.00 in baseline-068 / after-069). Not client bugs.
