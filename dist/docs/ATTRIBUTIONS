@@ -13,6 +13,8 @@ Amiga program (AmiSurf, -020, -gadtools)
     MIT.  LICENSES/qoi-MIT.txt
 * Built against the MUI developer headers; MUI itself is installed by the user
   and not included.
+  ui/muiinc/amiga_compiler.h is AmiStudio's own (GPL v3), replacing the
+  Hyperion/Amiga, Inc. header ("All Rights Reserved").
 * Ken's Icons - Kenneth's DualPNG Workbench icons (the AmiSurf drawer
   icon), also shipped in AmiKit. Copied byte-for-byte, never re-saved.
 * Toolbar icon shapes: Lucide - ISC licence, Copyright (c) Lucide Contributors.
